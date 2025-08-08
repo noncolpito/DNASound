@@ -1,0 +1,927 @@
+    
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8" />
+    <title>Flappy Chico</title>
+    <style>
+        body {
+            background: linear-gradient(to bottom, #87ceeb 0%, #f0e68c 100%);
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Treasure Map Deadhand', Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 40px auto 0 auto;
+            background: #87ceeb;
+            border: 4px solid #222;
+            box-shadow: 0 0 20px #222;
+            /* Mobile friendly */
+            touch-action: manipulation;
+            -ms-touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            color: #fff;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #muteBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+            border: 2px solid #222;
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            font-size: 18px;
+            line-height: 1;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #muteBtn:active { transform: scale(0.98); }
+    </style>
+</head>
+<body>
+    <div id="score">RUM: 0</div>
+    <button id="muteBtn" aria-label="Toggle audio" title="Audio">🔊</button>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <script>
+        // Costanti di gioco
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+    const GRAVITY = 0.42;
+        const FLAP = -8;
+        const CHICO_RADIUS = 24;
+        let chicoY = canvas.height / 2;
+        let chicoVY = 0;
+    let score = 0;
+        let gameOver = false;
+        // Start & safe-start
+        let hasStarted = false;
+        let showHint = true;
+        const SAFE_START_DURATION = 1600; // ms di invulnerabilità iniziale
+        let safeStartEndTime = 0;
+
+        // Ostacoli (barili)
+        const OBSTACLE_WIDTH = 60;
+    const OBSTACLE_GAP = 320;
+    const OBSTACLE_SPEED = 2.4;
+    // Difficoltà dinamica
+    let obstacleGap = OBSTACLE_GAP;
+    let obstacleSpeed = OBSTACLE_SPEED;
+        let obstacles = [];
+
+        // Bottiglie di rum
+    const BOTTLE_RADIUS = 16;
+    let bottles = [];
+        // Particelle scintille
+        let particles = [];
+        // Parallax: navi/isole
+        const parallaxElements = [
+            {x: 70, y: 420, w: 90, h: 40, type: 'island'},
+            {x: 320, y: 350, w: 70, h: 30, type: 'ship'}
+        ];
+        function drawParallax() {
+            for (let elem of parallaxElements) {
+                ctx.save();
+                if (elem.type === 'island') {
+                    ctx.fillStyle = '#e2c97b';
+                    ctx.beginPath();
+                    ctx.ellipse(elem.x, elem.y, elem.w/2, elem.h/2, 0, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#228B22';
+                    ctx.beginPath();
+                    ctx.ellipse(elem.x, elem.y-elem.h/2+8, elem.w/3, elem.h/4, 0, 0, Math.PI*2);
+                    ctx.fill();
+                } else {
+                    // nave stilizzata con teschio sulla vela e scritta "DNAS" sullo scafo
+                    const hullX = elem.x - elem.w/2;
+                    const hullY = elem.y;
+                    const hullW = elem.w;
+                    const hullH = elem.h/2;
+
+                    // Scafo
+                    ctx.fillStyle = '#8B5A2B';
+                    ctx.fillRect(hullX, hullY, hullW, hullH);
+
+                    // Vela (triangolo bianco)
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(elem.x, elem.y);
+                    ctx.lineTo(elem.x + elem.w/4, elem.y - elem.h/2);
+                    ctx.lineTo(elem.x - elem.w/4, elem.y - elem.h/2);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // Teschio nero sulla vela (centro approssimato della vela)
+                    const sailCX = elem.x;
+                    const sailCY = elem.y - elem.h/2 + (elem.h * 0.18);
+                    const skullR = Math.max(4, Math.min(8, Math.floor(elem.h * 0.18)));
+                    // testa
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(sailCX, sailCY, skullR, 0, Math.PI * 2);
+                    ctx.fill();
+                    // mandibola
+                    ctx.beginPath();
+                    ctx.moveTo(sailCX - skullR * 0.7, sailCY + skullR * 0.5);
+                    ctx.quadraticCurveTo(sailCX, sailCY + skullR * 1.1, sailCX + skullR * 0.7, sailCY + skullR * 0.5);
+                    ctx.lineTo(sailCX - skullR * 0.7, sailCY + skullR * 0.5);
+                    ctx.closePath();
+                    ctx.fill();
+                    // occhi (fori bianchi)
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(sailCX - skullR * 0.35, sailCY - skullR * 0.2, skullR * 0.22, 0, Math.PI * 2);
+                    ctx.arc(sailCX + skullR * 0.35, sailCY - skullR * 0.2, skullR * 0.22, 0, Math.PI * 2);
+                    ctx.fill();
+                    // naso (triangolino)
+                    ctx.beginPath();
+                    ctx.moveTo(sailCX, sailCY + skullR * 0.05);
+                    ctx.lineTo(sailCX - skullR * 0.12, sailCY + skullR * 0.35);
+                    ctx.lineTo(sailCX + skullR * 0.12, sailCY + skullR * 0.35);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // Scritta "DNAS" sullo scafo
+                    ctx.fillStyle = '#fff';
+                    ctx.font = `${Math.max(8, Math.floor(hullH * 0.6))}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('DNAS', hullX + hullW / 2, hullY + hullH / 2 + 1);
+                }
+                ctx.restore();
+            }
+        }
+
+        function drawHintOverlay() {
+            if (!showHint) return;
+            const w = canvas.width * 0.8;
+            const h = 90;
+            const x = (canvas.width - w) / 2;
+            const y = canvas.height * 0.35;
+
+            ctx.save();
+            // pannello semitrasparente
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            // testo
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 28px Arial';
+            ctx.fillText('TAP per volare', canvas.width/2, y + h/2 - 8);
+            ctx.font = '14px Arial';
+            ctx.fillText('Raccogli RUM per fare punti', canvas.width/2, y + h/2 + 16);
+            ctx.restore();
+        }
+
+        function isSafeStartActive() {
+            return Date.now() < safeStartEndTime;
+        }
+
+        function drawParticles() {
+            for (let i = particles.length-1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life/20);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.restore();
+                if (p.life <= 0) particles.splice(i,1);
+            }
+        }
+
+        function spawnParticles(x, y, color='#ffd700') {
+            for (let i=0; i<12; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random()-0.5)*2.5,
+                    vy: (Math.random()-0.5)*2.5,
+                    size: 2+Math.random()*2,
+                    color,
+                    life: 18+Math.random()*8
+                });
+            }
+        }
+
+        // Ostacoli volanti (barili volanti e gabbiani)
+        const FLYING_OBSTACLE_WIDTH = 48;
+        const FLYING_OBSTACLE_HEIGHT = 36;
+    const FLYING_OBSTACLE_SPEED = 2.8;
+        let flyingObstacles = [];
+
+    // Integrazione Telegram/parent: notifiche punteggio e game over
+        function notifyScore(currentScore) {
+            try {
+                if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.sendData === 'function') {
+                    Telegram.WebApp.sendData(JSON.stringify({ type: 'score', score: currentScore }));
+                } else if (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function') {
+                    TelegramGameProxy.shareScore(currentScore);
+                } else if (window.parent && window !== window.parent && typeof window.parent.postMessage === 'function') {
+                    window.parent.postMessage({ type: 'score', score: currentScore }, '*');
+                }
+            } catch (_) { /* no-op */ }
+        }
+        function notifyGameOver(finalScore) {
+            try {
+                if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.sendData === 'function') {
+                    Telegram.WebApp.sendData(JSON.stringify({ type: 'game_over', score: finalScore }));
+                } else if (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function') {
+                    // Legacy games often send score on game over too
+                    TelegramGameProxy.shareScore(finalScore);
+                } else if (window.parent && window !== window.parent && typeof window.parent.postMessage === 'function') {
+                    window.parent.postMessage({ type: 'game_over', score: finalScore }, '*');
+                }
+            } catch (_) { /* no-op */ }
+        }
+
+        // Musica di sottofondo (avvio al primo TAP)
+        const MUSIC_URL = 'https://noncolpito.github.io/DNASound/dnas.mp3'; // link mp3
+        let bgm = null;
+        let isMuted = false;
+        function setupBgm(url) {
+            if (bgm) return;
+            try {
+                bgm = new Audio(url);
+                bgm.loop = true;
+                bgm.volume = 0.4; // regola volume a piacere
+                bgm.preload = 'auto';
+            } catch (_) { /* no-op */ }
+        }
+        function ensureBgmPlaying() {
+            if (!bgm || isMuted) return;
+            const p = bgm.play();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+        function toggleMute() {
+            const btn = document.getElementById('muteBtn');
+            isMuted = !isMuted;
+            if (bgm) {
+                bgm.muted = isMuted;
+                if (isMuted) {
+                    bgm.pause();
+                } else {
+                    ensureBgmPlaying();
+                }
+            }
+            btn.textContent = isMuted ? '🔇' : '🔊';
+        }
+
+
+        function resetObstacles() {
+            obstacles = [createObstacle(canvas.width)];
+        }
+        function createObstacle(x) {
+            const minGap = 60;
+            const maxGap = canvas.height - 60 - obstacleGap;
+            const gapY = Math.floor(Math.random() * (maxGap - minGap + 1)) + minGap;
+            return { x: x, gapY: gapY, passed: false };
+        }
+
+        function resetBottles() {
+            bottles = [createBottle(canvas.width + 200)];
+        }
+        function createBottle(x) {
+            const minY = 80;
+            const maxY = canvas.height - 80;
+            let y;
+            if (obstacles.length) {
+                const last = obstacles[obstacles.length - 1];
+                const target = last.gapY + obstacleGap / 2;
+                const spread = obstacleGap * 0.6;
+                y = target + (Math.random() - 0.5) * spread;
+                y = Math.max(minY, Math.min(maxY, y));
+            } else {
+                y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+            }
+            return { x: x, y: y, collected: false };
+        }
+
+        function resetFlyingObstacles() {
+            flyingObstacles = [createFlyingObstacle(canvas.width + 100)];
+        }
+        function createFlyingObstacle(x) {
+            const type = Math.random() < 0.5 ? 'barile' : 'gabbiano';
+            const minY = 60;
+            const maxY = canvas.height - 200;
+            const y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+            return { x: x, y: y, type: type, passed: false };
+        }
+function drawFlyingObstacle(obs) {
+    ctx.save();
+    if (obs.type === 'barile') {
+        // Barile dettagliato
+        // Corpo
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(obs.x + FLYING_OBSTACLE_WIDTH/2, obs.y + FLYING_OBSTACLE_HEIGHT/2, FLYING_OBSTACLE_WIDTH/2, FLYING_OBSTACLE_HEIGHT/2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#a0522d';
+        ctx.shadowColor = '#654321';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // Doghe
+        ctx.strokeStyle = '#8B5A2B';
+        ctx.lineWidth = 2;
+        for (let i = 1; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(obs.x + i * FLYING_OBSTACLE_WIDTH/4, obs.y + 6);
+            ctx.lineTo(obs.x + i * FLYING_OBSTACLE_WIDTH/4, obs.y + FLYING_OBSTACLE_HEIGHT - 6);
+            ctx.stroke();
+        }
+        // Anelli metallici
+        ctx.strokeStyle = '#bbb';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(obs.x + FLYING_OBSTACLE_WIDTH/2, obs.y + 8, FLYING_OBSTACLE_WIDTH/2.1, 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(obs.x + FLYING_OBSTACLE_WIDTH/2, obs.y + FLYING_OBSTACLE_HEIGHT - 8, FLYING_OBSTACLE_WIDTH/2.1, 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    } else {
+        // Gabbiano migliorato
+        ctx.save();
+        const cx = obs.x + FLYING_OBSTACLE_WIDTH/2;
+        const cy = obs.y + FLYING_OBSTACLE_HEIGHT/2;
+
+        // Ombra lieve
+        ctx.shadowColor = 'rgba(0,0,0,0.25)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1;
+
+        // Corpo con gradiente
+        const bodyGrad = ctx.createLinearGradient(cx - 12, cy - 10, cx + 12, cy + 10);
+        bodyGrad.addColorStop(0, '#f6f6f6');
+        bodyGrad.addColorStop(1, '#d9d9d9');
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 16, 10, Math.PI/14, 0, Math.PI * 2);
+        ctx.fillStyle = bodyGrad;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.stroke();
+
+        // Testa
+        const headGrad = ctx.createRadialGradient(cx + 10, cy - 4, 1, cx + 8, cy - 4, 6);
+        headGrad.addColorStop(0, '#ffffff');
+        headGrad.addColorStop(1, '#e8e8e8');
+        ctx.beginPath();
+        ctx.arc(cx + 8, cy - 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = headGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+        ctx.stroke();
+
+        // Becco (superiore/inferiore) con sfumatura
+        const beakGrad = ctx.createLinearGradient(cx + 12, cy - 4, cx + 24, cy + 2);
+        beakGrad.addColorStop(0, '#ffd16a');
+        beakGrad.addColorStop(1, '#ffae00');
+        // superiore
+        ctx.beginPath();
+        ctx.moveTo(cx + 12, cy - 2);
+        ctx.quadraticCurveTo(cx + 20, cy - 6, cx + 24, cy - 1);
+        ctx.lineTo(cx + 13, cy - 1);
+        ctx.closePath();
+        ctx.fillStyle = beakGrad;
+        ctx.fill();
+        // inferiore
+        ctx.beginPath();
+        ctx.moveTo(cx + 12, cy - 1);
+        ctx.quadraticCurveTo(cx + 19, cy + 2, cx + 23, cy + 1);
+        ctx.lineTo(cx + 13, cy + 1);
+        ctx.closePath();
+        ctx.fillStyle = '#ffae00';
+        ctx.fill();
+
+        // Occhio con riflesso
+        ctx.beginPath();
+        ctx.arc(cx + 9, cy - 3, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#111';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + 9.6, cy - 3.4, 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fill();
+
+        // Ali animate
+        const t = Date.now();
+        const wingAngle = Math.sin((t + obs.x * 30) / 180) * 0.6;
+        // Ala posteriore (più trasparente)
+        ctx.save();
+        ctx.translate(cx - 6, cy - 2);
+        ctx.rotate(-0.15 - wingAngle * 0.8);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(-16, -8, -28, 0);
+        ctx.quadraticCurveTo(-16, 6, 0, 0);
+        ctx.fillStyle = 'rgba(210,210,210,0.7)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+        ctx.stroke();
+        ctx.restore();
+        // Ala anteriore
+        ctx.save();
+        ctx.translate(cx - 6, cy - 2);
+        ctx.rotate(0.15 + wingAngle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(-18, -10, -30, -2);
+        ctx.quadraticCurveTo(-16, 8, 0, 0);
+        ctx.fillStyle = '#e6e6e6';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.stroke();
+        ctx.restore();
+
+        // Coda
+        ctx.beginPath();
+        ctx.moveTo(cx - 12, cy + 2);
+        ctx.lineTo(cx - 18, cy + 1);
+        ctx.lineTo(cx - 16, cy + 5);
+        ctx.closePath();
+        ctx.fillStyle = '#dcdcdc';
+        ctx.fill();
+
+        ctx.restore(); // fine ramo gabbiano
+    } // close else branch
+    ctx.restore(); // restore outer save
+}
+
+function drawChico(y) {
+    ctx.save();
+    const x = 80;
+
+    // Ombra dolce
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 3;
+
+    // Corpo (rosso) con gradiente e contorno
+    const bodyGrad = ctx.createRadialGradient(x - 6, y - 8, CHICO_RADIUS * 0.2, x, y, CHICO_RADIUS);
+    bodyGrad.addColorStop(0, '#ff3b30');
+    bodyGrad.addColorStop(1, '#8c0000');
+    ctx.beginPath();
+    ctx.arc(x, y, CHICO_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#7a0000';
+    ctx.stroke();
+
+    // Pancia (giallo-oro) con gradiente e highlight
+    ctx.shadowBlur = 0;
+    const bellyGrad = ctx.createRadialGradient(x, y + 10, CHICO_RADIUS * 0.2, x, y + 10, CHICO_RADIUS * 0.7);
+    bellyGrad.addColorStop(0, '#ffe680');
+    bellyGrad.addColorStop(1, '#d4b200');
+    ctx.beginPath();
+    ctx.arc(x, y + 10, CHICO_RADIUS * 0.7, 0, Math.PI * 2);
+    ctx.fillStyle = bellyGrad;
+    ctx.fill();
+    // Piccolo riflesso pancia
+    ctx.beginPath();
+    ctx.arc(x - 8, y + 2, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fill();
+
+    // Coda a piume (rosso, giallo, blu)
+    ctx.save();
+    ctx.translate(x, y + CHICO_RADIUS - 2);
+    ctx.rotate(Math.PI / 8);
+    const tailColors = ['#ff3b30', '#ffd700', '#0078ff'];
+    for (let i = 0; i < tailColors.length; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-2 - i * 2, 0);
+        ctx.quadraticCurveTo(-16 - i * 4, 16 + i * 2, -2 - i * 2, 28 + i * 2);
+        ctx.quadraticCurveTo(2 - i, 20 + i * 2, -2 - i * 2, 0);
+        ctx.fillStyle = tailColors[i];
+        ctx.globalAlpha = 0.9 - i * 0.15;
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Piume decorative rosse
+    for (let i = 0; i < 4; i++) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Math.PI / 7 * i);
+        ctx.beginPath();
+        ctx.moveTo(-CHICO_RADIUS + 6, -6);
+        ctx.quadraticCurveTo(-CHICO_RADIUS - 6, -10, -CHICO_RADIUS + 1, -1);
+        ctx.strokeStyle = '#ff5a5f';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Ali animate con gradiente
+    let wingAngle = Math.sin(Date.now() / 120) * 0.5 + (chicoVY < 0 ? -0.7 : 0);
+    for (let i = 0; i < 3; i++) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(wingAngle + i * 0.1);
+        const cx = -18, cy = i * 2, rx = 18 - i * 2, ry = 8;
+        const wingGrad = ctx.createRadialGradient(cx - 6, cy - 4, 2, cx, cy, rx);
+        wingGrad.addColorStop(0, '#ff6666');
+        wingGrad.addColorStop(1, '#b10000');
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, Math.PI / 4, 0, Math.PI * 2);
+        ctx.fillStyle = wingGrad;
+        ctx.globalAlpha = 0.78 - i * 0.18;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(122,0,0,0.6)';
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Becco con shading
+    ctx.save();
+    // Parte superiore
+    const upperBeakGrad = ctx.createLinearGradient(x + CHICO_RADIUS, y - 8, x + CHICO_RADIUS + 18, y);
+    upperBeakGrad.addColorStop(0, '#ffb347');
+    upperBeakGrad.addColorStop(1, '#ff8c00');
+    ctx.beginPath();
+    ctx.moveTo(x + CHICO_RADIUS, y - 6);
+    ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y - 10, x + CHICO_RADIUS + 18, y - 2);
+    ctx.lineTo(x + CHICO_RADIUS + 1, y - 2);
+    ctx.closePath();
+    ctx.fillStyle = upperBeakGrad;
+    ctx.fill();
+    // Parte inferiore
+    const lowerBeakGrad = ctx.createLinearGradient(x + CHICO_RADIUS, y, x + CHICO_RADIUS + 16, y + 6);
+    lowerBeakGrad.addColorStop(0, '#ff9e2c');
+    lowerBeakGrad.addColorStop(1, '#e67600');
+    ctx.beginPath();
+    ctx.moveTo(x + CHICO_RADIUS, y - 2);
+    ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y + 5, x + CHICO_RADIUS + 16, y + 2);
+    ctx.lineTo(x + CHICO_RADIUS, y + 4);
+    ctx.closePath();
+    ctx.fillStyle = lowerBeakGrad;
+    ctx.fill();
+    // Linea bocca
+    ctx.beginPath();
+    ctx.moveTo(x + CHICO_RADIUS + 2, y);
+    ctx.quadraticCurveTo(x + CHICO_RADIUS + 8, y + 2, x + CHICO_RADIUS + 14, y + 1);
+    ctx.strokeStyle = 'rgba(120,60,0,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Orecchino d'oro con highlight
+    const ringGrad = ctx.createRadialGradient(x + 3, y + CHICO_RADIUS / 2 - 1, 0.5, x + 4, y + CHICO_RADIUS / 2, 4);
+    ringGrad.addColorStop(0, '#fff2a8');
+    ringGrad.addColorStop(1, '#d4a700');
+    ctx.beginPath();
+    ctx.arc(x + 4, y + CHICO_RADIUS / 2, 4, 0, Math.PI * 2);
+    ctx.fillStyle = ringGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#9b7500';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Occhio con bordo e riflessi
+    ctx.beginPath();
+    ctx.arc(x + 14, y - 8, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Pupilla
+    ctx.beginPath();
+    ctx.arc(x + 16, y - 8, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'black';
+    ctx.fill();
+    // Riflessi
+    ctx.beginPath();
+    ctx.arc(x + 12, y - 10, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 17.5, y - 6.5, 0.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fill();
+
+    // Benda da pirata
+    ctx.save();
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x + 14, y - 8, 6, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.stroke();
+    // Nodo della benda
+    ctx.beginPath();
+    ctx.moveTo(x + 20, y - 13);
+    ctx.quadraticCurveTo(x + 25, y - 10, x + 22, y - 5);
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+
+    // Cappello da pirata con gradiente e bordo dorato
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 2;
+    const hatGrad = ctx.createLinearGradient(x + 2, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 8);
+    hatGrad.addColorStop(0, '#111');
+    hatGrad.addColorStop(1, '#2a2a2a');
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - CHICO_RADIUS - 2);
+    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
+    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 8, x + 2, y - CHICO_RADIUS - 2);
+    ctx.closePath();
+    ctx.fillStyle = hatGrad;
+    ctx.fill();
+    // Bordo dorato
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - CHICO_RADIUS - 2);
+    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Highlight cappello
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y - CHICO_RADIUS - 8);
+    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 14, x + 28, y - CHICO_RADIUS - 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Teschio sul cappello
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(x + 18, y - CHICO_RADIUS - 8, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 16, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
+    ctx.arc(x + 20, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
+    ctx.fillStyle = 'black';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + 15, y - CHICO_RADIUS - 5);
+    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 3, x + 21, y - CHICO_RADIUS - 5);
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+}
+
+function drawBottle(bottle) {
+    ctx.save();
+    const bob = Math.sin((Date.now() + bottle.x * 50) / 500) * 3;
+    ctx.translate(bottle.x, bottle.y + bob);
+    ctx.rotate(-Math.PI/8);
+
+    // Corpo in vetro
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, BOTTLE_RADIUS, BOTTLE_RADIUS*1.3, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.stroke();
+
+    // Liquido (rum ambrato)
+    ctx.beginPath();
+    ctx.ellipse(0, 4, BOTTLE_RADIUS*0.9, BOTTLE_RADIUS*0.9, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#c97e2b';
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Collo della bottiglia
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(-4, -BOTTLE_RADIUS*1.3-10, 8, 18);
+    // Tappo
+    ctx.fillStyle = '#5b2b17';
+    ctx.fillRect(-6, -BOTTLE_RADIUS*1.3-14, 12, 6);
+
+    // Etichetta con "R"
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-10, -2, 20, 12);
+    ctx.strokeStyle = '#b33';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-10, -2, 20, 12);
+    ctx.fillStyle = '#b33';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('R', 0, 4);
+
+    ctx.restore();
+}
+
+        function drawObstacle(obs) {
+            ctx.save();
+            ctx.fillStyle = '#8B5A2B';
+            ctx.fillRect(obs.x, 0, OBSTACLE_WIDTH, obs.gapY);
+            ctx.fillRect(obs.x, obs.gapY + OBSTACLE_GAP, OBSTACLE_WIDTH, canvas.height - obs.gapY - OBSTACLE_GAP);
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(obs.x, 0, OBSTACLE_WIDTH, obs.gapY);
+            ctx.strokeRect(obs.x, obs.gapY + OBSTACLE_GAP, OBSTACLE_WIDTH, canvas.height - obs.gapY - OBSTACLE_GAP);
+            ctx.restore();
+        }
+
+        function updateDifficulty() {
+            // Incrementa velocità e riduci gap con il punteggio (limiti inclusi)
+            const speedBoost = Math.min(score * 0.05, 1.8);
+            obstacleSpeed = OBSTACLE_SPEED + speedBoost;
+            obstacleGap = Math.max(220, OBSTACLE_GAP - score * 2);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawParallax();
+            drawParticles();
+
+            // Fase pre-avvio: scena statica con suggerimento
+            if (!hasStarted && !gameOver) {
+                for (let i = 0; i < obstacles.length; i++) {
+                    drawObstacle(obstacles[i]);
+                }
+                for (let i = 0; i < bottles.length; i++) {
+                    if (!bottles[i].collected) drawBottle(bottles[i]);
+                }
+                // Chico con lieve dondolio senza fisica
+                const bob = Math.sin(Date.now() / 400) * 3;
+                drawChico(chicoY + bob);
+                drawHintOverlay();
+                document.getElementById('score').textContent = `RUM: ${score}`;
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            updateDifficulty();
+            // Ostacoli (barili a terra/cielo)
+            for (let i = 0; i < obstacles.length; i++) {
+                let obs = obstacles[i];
+                obs.x -= obstacleSpeed;
+                drawObstacle(obs);
+                // Collisione con il bordo del gap
+                if (
+                    80 + CHICO_RADIUS > obs.x &&
+                    80 - CHICO_RADIUS < obs.x + OBSTACLE_WIDTH
+                ) {
+                    if (!isSafeStartActive() && (chicoY - CHICO_RADIUS < obs.gapY || chicoY + CHICO_RADIUS > obs.gapY + obstacleGap)) {
+                        gameOver = true;
+                    }
+                }
+                // Punteggio solo tramite bottiglie: non incrementare qui
+                obs.passed = obs.passed || (obs.x + OBSTACLE_WIDTH < 80 - CHICO_RADIUS);
+            }
+            // Pulisci ostacoli usciti dallo schermo
+            if (obstacles.length && obstacles[0].x + OBSTACLE_WIDTH < 0) {
+                obstacles.shift();
+            }
+            // Genera nuovi ostacoli a distanza regolare
+            if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 220) {
+                obstacles.push(createObstacle(canvas.width + Math.random() * 120));
+            }
+            // Ostacoli volanti solo dopo 10 punti
+            if (score >= 5) {
+                for (let i = 0; i < flyingObstacles.length; i++) {
+                    let obs = flyingObstacles[i];
+                    const flySpeed = Math.max(obstacleSpeed * 1.15, 2.2);
+                    obs.x -= flySpeed;
+                    if (obs.type === 'gabbiano') {
+                        obs.y += Math.sin((Date.now() + obs.x * 20) / 600) * 0.6;
+                    }
+                    drawFlyingObstacle(obs);
+                    if (
+                        80 + CHICO_RADIUS > obs.x &&
+                        80 - CHICO_RADIUS < obs.x + FLYING_OBSTACLE_WIDTH &&
+                        chicoY + CHICO_RADIUS > obs.y &&
+                        chicoY - CHICO_RADIUS < obs.y + FLYING_OBSTACLE_HEIGHT
+                    ) {
+                        if (!isSafeStartActive()) gameOver = true;
+                    }
+                    // Nessun incremento punteggio per ostacoli volanti
+                    obs.passed = true;
+                }
+                if (flyingObstacles.length && flyingObstacles[0].x + FLYING_OBSTACLE_WIDTH < 0) {
+                    flyingObstacles.shift();
+                }
+                if (flyingObstacles.length === 0 || flyingObstacles[flyingObstacles.length-1].x < canvas.width - 300) {
+                    flyingObstacles.push(createFlyingObstacle(canvas.width + Math.random() * 200));
+                }
+            }
+
+        // Bottiglie
+            for (let i = 0; i < bottles.length; i++) {
+                let bottle = bottles[i];
+                bottle.x -= obstacleSpeed;
+                if (!bottle.collected) {
+                    drawBottle(bottle);
+                }
+                if (!bottle.collected && Math.hypot(bottle.x - 80, bottle.y - chicoY) < CHICO_RADIUS + BOTTLE_RADIUS) {
+                    score += 1;
+                    bottle.collected = true;
+                    spawnParticles(bottle.x, bottle.y);
+            notifyScore(score);
+                }
+            }
+            // Rimuovi bottiglie raccolte o uscite dallo schermo
+            bottles = bottles.filter(b => !b.collected && b.x + BOTTLE_RADIUS > 0);
+            // Genera nuove bottiglie in coda
+            if (bottles.length === 0 || bottles[bottles.length - 1].x < canvas.width - 260) {
+                bottles.push(createBottle(canvas.width + 120 + Math.random() * 120));
+            }
+
+            // Chico physics
+            chicoVY += GRAVITY;
+            chicoY += chicoVY;
+            drawChico(chicoY);
+
+            if (!isSafeStartActive() && (chicoY + CHICO_RADIUS > canvas.height || chicoY - CHICO_RADIUS < 0)) {
+                gameOver = true;
+            }
+
+            document.getElementById('score').textContent = `RUM: ${score}`;
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            } else {
+                // suono rimosso
+                notifyGameOver(score);
+                ctx.font = 'bold 36px Arial';
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.fillText('Arr!', canvas.width/2, canvas.height/2);
+            }
+        }
+
+        function flap() {
+            if (!hasStarted && !gameOver) {
+                hasStarted = true;
+                showHint = false;
+                safeStartEndTime = Date.now() + SAFE_START_DURATION;
+                if (!bgm) setupBgm(MUSIC_URL);
+                if (!isMuted) ensureBgmPlaying();
+                chicoVY = FLAP;
+                return;
+            }
+            if (!gameOver) {
+                chicoVY = FLAP;
+                // suono rimosso
+            } else {
+                // reset partita
+                chicoY = canvas.height / 2;
+                chicoVY = 0;
+                score = 0;
+                gameOver = false;
+                hasStarted = false;
+                showHint = true;
+                safeStartEndTime = 0;
+                resetObstacles();
+                resetBottles();
+                resetFlyingObstacles();
+                gameLoop();
+            }
+        }
+    // Input solo touch/mouse (mobile friendly)
+    canvas.addEventListener('mousedown', flap);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); flap(); }, { passive: false });
+
+    // Avvio: mostra hint, nessun movimento finché non si tocca
+    resetObstacles();
+    resetBottles();
+    resetFlyingObstacles();
+    hasStarted = false;
+    showHint = true;
+    safeStartEndTime = 0;
+    // Inizializza pulsante muto
+    document.getElementById('muteBtn').addEventListener('click', toggleMute);
+    gameLoop();
+    </script>
+</body>
+</html>
