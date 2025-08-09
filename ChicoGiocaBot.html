@@ -831,7 +831,6 @@ function drawBottle(bottle) {
                     score += 1;
                     bottle.collected = true;
                     spawnParticles(bottle.x, bottle.y);
-                    telegramShareScore(score);
                 }
             }
             // Rimuovi bottiglie raccolte o uscite dallo schermo
@@ -855,6 +854,7 @@ function drawBottle(bottle) {
                 requestAnimationFrame(gameLoop);
             } else {
                 // suono rimosso
+                telegramShareScore(score);
                 ctx.font = 'bold 36px Arial';
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
