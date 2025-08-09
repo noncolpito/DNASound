@@ -231,29 +231,12 @@
     const FLYING_OBSTACLE_SPEED = 2.8;
         let flyingObstacles = [];
 
-    // Integrazione Telegram/parent: notifiche punteggio e game over
-        function notifyScore(currentScore) {
-            try {
-                if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.sendData === 'function') {
-                    Telegram.WebApp.sendData(JSON.stringify({ type: 'score', score: currentScore }));
-                } else if (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function') {
-                    TelegramGameProxy.shareScore(currentScore);
-                } else if (window.parent && window !== window.parent && typeof window.parent.postMessage === 'function') {
-                    window.parent.postMessage({ type: 'score', score: currentScore }, '*');
-                }
-            } catch (_) { /* no-op */ }
-        }
-        function notifyGameOver(finalScore) {
-            try {
-                if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.sendData === 'function') {
-                    Telegram.WebApp.sendData(JSON.stringify({ type: 'game_over', score: finalScore }));
-                } else if (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function') {
-                    // Legacy games often send score on game over too
-                    TelegramGameProxy.shareScore(finalScore);
-                } else if (window.parent && window !== window.parent && typeof window.parent.postMessage === 'function') {
-                    window.parent.postMessage({ type: 'game_over', score: finalScore }, '*');
-                }
-            } catch (_) { /* no-op */ }
+
+        // --- Game Platform: invia punteggio a Telegram ---
+        function telegramShareScore(score) {
+            if (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function') {
+                TelegramGameProxy.shareScore(score);
+            }
         }
 
         // Musica di sottofondo (avvio al primo TAP)
@@ -848,7 +831,7 @@ function drawBottle(bottle) {
                     score += 1;
                     bottle.collected = true;
                     spawnParticles(bottle.x, bottle.y);
-            notifyScore(score);
+                    telegramShareScore(score);
                 }
             }
             // Rimuovi bottiglie raccolte o uscite dallo schermo
@@ -872,7 +855,6 @@ function drawBottle(bottle) {
                 requestAnimationFrame(gameLoop);
             } else {
                 // suono rimosso
-                notifyGameOver(score);
                 ctx.font = 'bold 36px Arial';
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
