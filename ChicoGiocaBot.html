@@ -198,9 +198,9 @@
     let baseObstacleSpeed = OBSTACLE_SPEED_DEFAULT;
     let diffScale = 1.0; // modifica quanto la difficoltà cresce col punteggio
     const DIFFICULTIES = {
-        'facile':   { gap: 360, speed: 2.0, gravity: 0.38, dynamicScale: 0.85, desc: 'Più spazio, movimento lento.' },
+        'facile':   { gap: 380, speed: 1.55, gravity: 0.31, dynamicScale: 0.70, desc: 'Gap molto ampio, ostacoli lenti, Chico leggero.' },
         'normale':  { gap: 320, speed: 2.4, gravity: 0.42, dynamicScale: 1.0,  desc: 'Equilibrio tra spazio e velocità.' },
-        'difficile':{ gap: 280, speed: 2.8, gravity: 0.46, dynamicScale: 1.18, desc: 'Spazio ridotto, cresce più in fretta.' }
+        'difficile':{ gap: 250, speed: 3.35, gravity: 0.54, dynamicScale: 1.32, desc: 'Gap stretto, ostacoli veloci, Chico pesante.' }
     };
     let currentDifficulty = 'normale';
     let difficultyChosen = false;
