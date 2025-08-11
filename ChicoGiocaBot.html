@@ -209,6 +209,19 @@
         // Bottiglie di rum
     const BOTTLE_RADIUS = 16;
     let bottles = [];
+    // Power-up: Scudo (invincibilità per un colpo)
+    const SHIELD_RADIUS = 18;
+    let shieldItems = [];
+    let hasShield = false;
+    // Stato visivo / invulnerabilità scudo
+    let shieldBreakingEnd = 0; // fine anim rottura
+    let shieldInvulnUntil = 0; // invuln attiva mentre scudo integro o in rottura
+    let shieldCharges = 0;
+    const SHIELD_HITS = 1;
+    let lastShieldSpawnScore = 0;
+    const SHIELD_MIN_SCORE_GAP = 4;
+    const SHIELD_SPAWN_CHANCE = 0.5; // probabilità per frame
+    const SHIELD_BREAK_DURATION = 600; // ms animazione rottura (invulnerabile)
         // Particelle scintille
         let particles = [];
         // Parallax: navi/isole
@@ -217,70 +230,110 @@
             {x: 320, y: 545, w: 70, h: 30, type: 'ship'} 
         ];
         // --- Nuvole di sfondo (alto) ---
-        const MAX_CLOUDS = 6;
+        // --- Sistema nuvole migliorato (multi-layer con profondità, gradienti e variazioni) ---
+        // Nuvole più grandi, dense e scenografiche
+        const CLOUD_LAYER_CONFIG = [
+            { id:0, weight:0.28, speed:[0.04,0.08], scale:[0.85,1.25], alpha:0.50, y:[-35,25],   blur:12 },   // lontane, grandi (ancora più in alto)
+            { id:1, weight:0.48, speed:[0.09,0.16], scale:[1.25,1.65], alpha:0.80, y:[-10,60],    blur:18 },  // medie, molto grandi (ancora più in alto)
+            { id:2, weight:0.24, speed:[0.15,0.26], scale:[1.7,2.25], alpha:0.92, y:[10,100],    blur:26 }   // vicine, enormi (ancora più in alto)
+        ];
+        const TOTAL_CLOUDS = 18;
         let clouds = [];
-        function createCloud(x) {
-            const w = 90 + Math.random() * 120;
-            const h = 26 + Math.random() * 24;
-            const y = 18 + Math.random() * 110; // fascia alta
-            const speed = 0.15 + Math.random() * 0.22; // lenta
-            const lobes = 3 + Math.floor(Math.random() * 3); // 3-5
+        function pickLayer() {
+            const r = Math.random();
+            let acc = 0;
+            for (const cfg of CLOUD_LAYER_CONFIG) { acc += cfg.weight; if (r <= acc) return cfg; }
+            return CLOUD_LAYER_CONFIG[CLOUD_LAYER_CONFIG.length-1];
+        }
+        function createCloud(x, layerCfg) {
+            const cfg = layerCfg || pickLayer();
+            const scale = cfg.scale[0] + Math.random() * (cfg.scale[1]-cfg.scale[0]);
+            const baseW = 180, baseH = 62;
+            const w = baseW * scale * (1.05 + Math.random()*0.7);
+            const h = baseH * scale * (0.85 + Math.random()*0.45);
+            const y = cfg.y[0] + Math.random() * (cfg.y[1]-cfg.y[0]);
+            const speed = cfg.speed[0] + Math.random() * (cfg.speed[1]-cfg.speed[0]);
+            const lobes = 5 + Math.floor(Math.random()*3); // 5-7
             const lobeData = [];
             const spacing = w / (lobes + 1);
-            for (let i = 0; i < lobes; i++) {
-                const lx = -w/2 + spacing * (i+1);
-                const ly = (Math.random()*0.4 - 0.2) * h * 0.4;
-                const rw = spacing * (0.9 + Math.random()*0.3);
-                const rh = h * (0.35 + Math.random()*0.25);
+            for (let i=0;i<lobes;i++) {
+                const lx = -w/2 + spacing*(i+1);
+                const ly = (Math.random()*0.5 - 0.25) * h * 0.38;
+                const rw = spacing * (1.0 + Math.random()*0.45) * (0.85 + (i%2)*0.18);
+                const rh = h * (0.32 + Math.random()*0.38);
                 lobeData.push({ lx, ly, rw, rh });
             }
-            return { x, y, w, h, speed, lobes, lobeData };
+            return { x, y, w, h, speed, lobes, lobeData, layer: cfg.id, alpha: cfg.alpha, blur: cfg.blur, scale };
         }
         function resetClouds() {
             clouds = [];
-            let cursor = 0;
-            while (clouds.length < MAX_CLOUDS) {
-                clouds.push(createCloud(cursor));
-                cursor += 130 + Math.random() * 160;
+            // Distribuisci lungo l'asse X tenendo conto della densità
+            for (let i=0;i<TOTAL_CLOUDS;i++) {
+                const cfg = pickLayer();
+                const gap = 120 + Math.random()*180;
+                const x = i===0 ? 0 : (clouds[i-1].x + gap);
+                clouds.push(createCloud(x, cfg));
             }
         }
+        function recycleCloud(c) {
+            const lastX = clouds.reduce((m,cl)=> Math.max(m, cl.x + cl.w*0.5), -Infinity);
+            const cfg = pickLayer();
+            const nc = createCloud(Math.max(canvas.width+100, lastX + 120 + Math.random()*160), cfg);
+            Object.assign(c, nc);
+        }
         function drawClouds() {
+            // Ordina per layer (lontane prima) per profondità
+            clouds.sort((a,b)=> a.layer - b.layer);
+            const now = Date.now();
             for (let c of clouds) {
-                c.x -= c.speed; // movimento continuo
-                if (c.x + c.w < -60) {
-                    const lastX = clouds.reduce((m,cl)=>Math.max(m,cl.x), -Infinity);
-                    c.x = Math.max(canvas.width + 80, lastX + 140 + Math.random()*100);
-                    c.y = 18 + Math.random() * 110;
-                    c.w = 90 + Math.random() * 120;
-                    c.h = 26 + Math.random() * 24;
-                    c.speed = 0.15 + Math.random() * 0.22;
-                    const lobes = 3 + Math.floor(Math.random() * 3);
-                    c.lobes = lobes;
-                    c.lobeData = [];
-                    const spacing = c.w / (lobes + 1);
-                    for (let i = 0; i < lobes; i++) {
-                        const lx = -c.w/2 + spacing * (i+1);
-                        const ly = (Math.random()*0.4 - 0.2) * c.h * 0.4;
-                        const rw = spacing * (0.9 + Math.random()*0.3);
-                        const rh = c.h * (0.35 + Math.random()*0.25);
-                        c.lobeData.push({ lx, ly, rw, rh });
-                    }
+                c.x -= c.speed; // movimento costante
+                if (c.x + c.w < -80) {
+                    recycleCloud(c);
                 }
+                const lightDir = { x:-0.6, y:-0.8 }; // direzione “sole” in alto a sinistra
                 ctx.save();
                 ctx.translate(c.x + c.w/2, c.y + c.h/2);
+                ctx.globalAlpha = c.alpha;
+                // Costruisci forma
                 ctx.beginPath();
-                for (let i = 0; i < c.lobeData.length; i++) {
+                for (let i=0;i<c.lobeData.length;i++) {
                     const L = c.lobeData[i];
-                    const bob = Math.sin((Date.now()/1600) + (c.x + i*23) * 0.002) * 2;
+                    const bob = Math.sin((now/1700) + (c.x*0.015) + i*0.9) * (2 + c.layer);
                     ctx.ellipse(L.lx, L.ly + bob, L.rw, L.rh, 0, 0, Math.PI*2);
                 }
-                const grad = ctx.createLinearGradient(-c.w/2, -c.h/2, -c.w/2, c.h/2);
-                grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-                grad.addColorStop(1, 'rgba(255,255,255,0.60)');
-                ctx.fillStyle = grad;
+                // Gradiente volumetrico
+                const gradBody = ctx.createLinearGradient(-c.w/2, -c.h/2, c.w/2, c.h/2);
+                gradBody.addColorStop(0, 'rgba(255,255,255,0.96)');
+                gradBody.addColorStop(0.55, 'rgba(240,245,255,0.88)');
+                gradBody.addColorStop(1, 'rgba(210,225,245,0.72)');
+                ctx.fillStyle = gradBody;
                 ctx.shadowColor = 'rgba(255,255,255,0.9)';
-                ctx.shadowBlur = 14;
+                ctx.shadowBlur = c.blur;
                 ctx.fill();
+                // Ombra inferiore / retro
+                ctx.globalCompositeOperation = 'source-atop';
+                const shade = ctx.createLinearGradient(0,-c.h/2,0,c.h/2);
+                shade.addColorStop(0,'rgba(0,0,0,0)');
+                shade.addColorStop(0.55,'rgba(0,0,0,0)');
+                shade.addColorStop(1,'rgba(0,0,0,0.18)');
+                ctx.fillStyle = shade;
+                ctx.fill();
+                // Highlight direzionale
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.beginPath();
+                for (let i=0;i<c.lobeData.length;i++) {
+                    const L = c.lobeData[i];
+                    const rimR = Math.min(L.rw, L.rh) * 0.85;
+                    const hx = L.lx - lightDir.x * 4;
+                    const hy = L.ly - lightDir.y * 4;
+                    const highlight = ctx.createRadialGradient(hx, hy, rimR*0.1, hx, hy, rimR);
+                    highlight.addColorStop(0,'rgba(255,255,255,0.9)');
+                    highlight.addColorStop(1,'rgba(255,255,255,0)');
+                    ctx.fillStyle = highlight;
+                    ctx.beginPath();
+                    ctx.ellipse(hx, hy, rimR, rimR*0.75, 0, 0, Math.PI*2);
+                    ctx.fill();
+                }
                 ctx.restore();
             }
         }
@@ -700,6 +753,47 @@ function drawChico(y) {
     ctx.save();
     const x = 80;
 
+    // Aura scudo / flash consumo
+    if (hasShield) {
+        ctx.save();
+        const pulse = 0.6 + Math.sin(Date.now()/180) * 0.25;
+        const gradA = ctx.createRadialGradient(x, y, CHICO_RADIUS * 0.4, x, y, CHICO_RADIUS + 18);
+        gradA.addColorStop(0, 'rgba(120,200,255,0.0)');
+        gradA.addColorStop(0.55, 'rgba(120,200,255,0.20)');
+        gradA.addColorStop(1, 'rgba(120,200,255,0.0)');
+        ctx.beginPath();
+        ctx.arc(x, y, CHICO_RADIUS + 14 + pulse * 4, 0, Math.PI * 2);
+        ctx.fillStyle = gradA;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, CHICO_RADIUS + 10 + pulse * 3, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(160,230,255,0.85)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = 'rgba(120,200,255,0.9)';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+        ctx.restore();
+    } else if (Date.now() < shieldBreakingEnd) {
+        const remain = (shieldBreakingEnd - Date.now()) / SHIELD_BREAK_DURATION; // 1->0
+        const rings = 3;
+        for (let i=0;i<rings;i++) {
+            const ratio = i / rings;
+            const alpha = Math.max(0,(remain - ratio*0.25))*0.9;
+            if (alpha <= 0) continue;
+            ctx.save();
+            const r = CHICO_RADIUS + 12 + ratio*36 + Math.sin(Date.now()/90 + i)*2;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI*2);
+            ctx.strokeStyle = 'rgba(150,220,255,0.85)';
+            ctx.lineWidth = 2 + (1-remain)*2;
+            ctx.shadowColor = 'rgba(120,200,255,0.6)';
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
     // Ombra dolce
     ctx.shadowColor = 'rgba(0,0,0,0.25)';
     ctx.shadowBlur = 6;
@@ -920,6 +1014,180 @@ function drawChico(y) {
     ctx.restore();
 }
 
+// --- Power-up Scudo (tridente) ---
+function drawShieldItem(item) {
+    ctx.save();
+    const t = Date.now();
+    const bob = Math.sin((t + item.x * 40) / 600) * 4;
+    ctx.translate(item.x, item.y + bob);
+
+    // Soft ambient aura
+    const aura = ctx.createRadialGradient(0,0,6,0,0,SHIELD_RADIUS+18);
+    aura.addColorStop(0,'rgba(120,200,255,0.45)');
+    aura.addColorStop(0.5,'rgba(90,170,255,0.22)');
+    aura.addColorStop(1,'rgba(90,170,255,0)');
+    ctx.beginPath();
+    ctx.arc(0,0,SHIELD_RADIUS+18,0,Math.PI*2);
+    ctx.fillStyle = aura;
+    ctx.fill();
+
+    // Outer metallic ring
+    ctx.beginPath();
+    ctx.arc(0,0,SHIELD_RADIUS+4,0,Math.PI*2);
+    const ringGrad = ctx.createLinearGradient(-SHIELD_RADIUS-4,-SHIELD_RADIUS-4,SHIELD_RADIUS+4,SHIELD_RADIUS+4);
+    ringGrad.addColorStop(0,'#e6f6ff');
+    ringGrad.addColorStop(0.35,'#7fc2e6');
+    ringGrad.addColorStop(0.6,'#3e7ba8');
+    ringGrad.addColorStop(1,'#a2dfff');
+    ctx.fillStyle = ringGrad;
+    ctx.shadowColor = 'rgba(120,200,255,0.9)';
+    ctx.shadowBlur = 10;
+    ctx.fill();
+
+    // Inner shield body (slightly inset)
+    ctx.beginPath();
+    ctx.arc(0,0,SHIELD_RADIUS-2,0,Math.PI*2);
+    const coreGrad = ctx.createRadialGradient(-6,-6,4,0,0,SHIELD_RADIUS-2);
+    coreGrad.addColorStop(0,'#c7ecff');
+    coreGrad.addColorStop(0.35,'#62b8ff');
+    coreGrad.addColorStop(0.75,'#0e5d94');
+    coreGrad.addColorStop(1,'#083a5c');
+    ctx.fillStyle = coreGrad;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.stroke();
+
+    // Rotating light sweep (subtle)
+    const sweepA = (t/900)% (Math.PI*2);
+    ctx.save();
+    ctx.rotate(sweepA);
+    ctx.beginPath();
+    ctx.ellipse(0,0,SHIELD_RADIUS-4, (SHIELD_RADIUS-4)*0.55, 0, -0.4, 0.4);
+    const sweepGrad = ctx.createLinearGradient(-SHIELD_RADIUS,0,SHIELD_RADIUS,0);
+    sweepGrad.addColorStop(0,'rgba(255,255,255,0)');
+    sweepGrad.addColorStop(0.45,'rgba(255,255,255,0.0)');
+    sweepGrad.addColorStop(0.5,'rgba(255,255,255,0.35)');
+    sweepGrad.addColorStop(0.55,'rgba(255,255,255,0.0)');
+    sweepGrad.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = sweepGrad;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fill();
+    ctx.restore();
+
+    // Tridente stile Poseidone
+    ctx.save();
+    const triScale = 0.86;
+    ctx.scale(triScale, triScale);
+    ctx.lineJoin='round';
+    ctx.lineCap='round';
+    // Glow acqua esterno
+    const poseGlow = ctx.createRadialGradient(0,-4,3,0,0,SHIELD_RADIUS);
+    poseGlow.addColorStop(0,'rgba(160,235,255,0.85)');
+    poseGlow.addColorStop(0.35,'rgba(120,210,255,0.35)');
+    poseGlow.addColorStop(1,'rgba(120,210,255,0)');
+    ctx.beginPath();
+    ctx.arc(0,0,SHIELD_RADIUS-3,0,Math.PI*2);
+    ctx.fillStyle = poseGlow;
+    ctx.globalAlpha = 0.55;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Silhouette base (più spessa, scura blu)
+    ctx.beginPath();
+    // Asta centrale e punta
+    ctx.moveTo(0,12);
+    ctx.lineTo(0,-10);
+    ctx.lineTo(-3,-10);
+    ctx.lineTo(0,-24); // punta superiore
+    ctx.lineTo(3,-10);
+    ctx.lineTo(0,-10);
+    // Prong sinistro curvo
+    ctx.moveTo(0,-12);
+    ctx.lineTo(-9,-4);
+    ctx.quadraticCurveTo(-12,-2,-12,0);
+    ctx.lineTo(-12,-8);
+    ctx.quadraticCurveTo(-12,-14,-8,-18);
+    ctx.lineTo(-6,-14);
+    ctx.quadraticCurveTo(-8,-10,-6,-8);
+    ctx.lineTo(0,-14);
+    // Prong destro curvo
+    ctx.moveTo(0,-12);
+    ctx.lineTo(9,-4);
+    ctx.quadraticCurveTo(12,-2,12,0);
+    ctx.lineTo(12,-8);
+    ctx.quadraticCurveTo(12,-14,8,-18);
+    ctx.lineTo(6,-14);
+    ctx.quadraticCurveTo(8,-10,6,-8);
+    ctx.lineTo(0,-14);
+    // Barra decorativa / guardia
+    ctx.moveTo(-8,2);
+    ctx.lineTo(8,2);
+    // Anello piccolo
+    ctx.moveTo(0,2);
+    ctx.arc(0,2,2,0,Math.PI*2);
+    ctx.strokeStyle = '#012c44';
+    ctx.lineWidth = 7.4;
+    ctx.stroke();
+    // Riempimento dorato
+    const gold = ctx.createLinearGradient(0,-24,0,12);
+    gold.addColorStop(0,'#fff6c9');
+    gold.addColorStop(0.28,'#ffe178');
+    gold.addColorStop(0.55,'#ffc53a');
+    gold.addColorStop(0.75,'#e6a300');
+    gold.addColorStop(1,'#b87400');
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = gold;
+    ctx.fillRect(-20,-28,40,46);
+    ctx.globalCompositeOperation = 'source-over';
+    // Bordo chiaro interno
+    ctx.beginPath();
+    ctx.moveTo(0,12); ctx.lineTo(0,-10); ctx.lineTo(-2,-10); ctx.lineTo(0,-20); ctx.lineTo(2,-10); ctx.lineTo(0,-10);
+    ctx.moveTo(0,-12); ctx.lineTo(-8,-4); ctx.quadraticCurveTo(-10,-2,-10,-0.5); ctx.quadraticCurveTo(-10,-10,-6,-16);
+    ctx.moveTo(0,-12); ctx.lineTo(8,-4); ctx.quadraticCurveTo(10,-2,10,-0.5); ctx.quadraticCurveTo(10,-10,6,-16);
+    ctx.moveTo(-7,2); ctx.lineTo(7,2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+    // Highlight pulsante centrale
+    const pulse = 0.5 + Math.sin(t/350)*0.5;
+    ctx.beginPath();
+    ctx.arc(0,2,2.4+pulse*0.6,0,Math.PI*2);
+    const ring = ctx.createRadialGradient(0,2,0.5,0,2,3.2);
+    ring.addColorStop(0,'rgba(255,255,255,0.95)');
+    ring.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = ring;
+    ctx.fill();
+    ctx.restore();
+
+    // Small specular spot
+    ctx.beginPath();
+    ctx.arc(-6,-8,5,0,Math.PI*2);
+    const spot = ctx.createRadialGradient(-7,-9,1,-6,-8,5);
+    spot.addColorStop(0,'rgba(255,255,255,0.95)');
+    spot.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle = spot;
+    ctx.fill();
+
+    ctx.restore();
+}
+function spawnShieldMaybe() {
+    if (hasShield || shieldItems.length>0) return;
+    if (score - lastShieldSpawnScore < SHIELD_MIN_SCORE_GAP) return;
+    if (hasStarted && Math.random() < SHIELD_SPAWN_CHANCE) {
+        const y = 100 + Math.random() * (canvas.height - 220);
+        shieldItems.push({ x: canvas.width + 40, y, collected:false });
+        lastShieldSpawnScore = score;
+    }
+}
+function consumeShieldEffect() {
+    if (!hasShield) return;
+    hasShield = false;
+    shieldCharges = 0;
+    shieldBreakingEnd = Date.now() + SHIELD_BREAK_DURATION;
+    shieldInvulnUntil = shieldBreakingEnd; // invulnerabile finché dura l'anim di rottura
+    spawnParticles(80, chicoY, '#9fdfff');
+}
+
 function drawBottle(bottle) {
     ctx.save();
     const bob = Math.sin((Date.now() + bottle.x * 50) / 500) * 3;
@@ -1040,6 +1308,8 @@ function drawBottle(bottle) {
             }
 
             updateDifficulty();
+            // Possibile spawn scudo
+            spawnShieldMaybe();
             // Ostacoli (barili a terra/cielo)
             for (let i = 0; i < obstacles.length; i++) {
                 let obs = obstacles[i];
@@ -1051,7 +1321,10 @@ function drawBottle(bottle) {
                     80 - CHICO_RADIUS < obs.x + OBSTACLE_WIDTH
                 ) {
                     const gapSizeColl = obs.gap !== undefined ? obs.gap : obstacleGap;
-                    if (!isSafeStartActive() && (chicoY - CHICO_RADIUS < obs.gapY || chicoY + CHICO_RADIUS > obs.gapY + gapSizeColl)) {
+                    const outGap = (chicoY - CHICO_RADIUS < obs.gapY || chicoY + CHICO_RADIUS > obs.gapY + gapSizeColl);
+                    if (outGap && hasShield) {
+                        consumeShieldEffect();
+                    } else if (outGap && !isSafeStartActive() && Date.now() >= shieldInvulnUntil) {
                         gameOver = true;
                     }
                 }
@@ -1082,7 +1355,11 @@ function drawBottle(bottle) {
                         chicoY + CHICO_RADIUS > obs.y &&
                         chicoY - CHICO_RADIUS < obs.y + FLYING_OBSTACLE_HEIGHT
                     ) {
-                        if (!isSafeStartActive()) gameOver = true;
+                        if (hasShield) {
+                            consumeShieldEffect();
+                        } else if (!isSafeStartActive() && Date.now() >= shieldInvulnUntil) {
+                            gameOver = true;
+                        }
                     }
                     // Nessun incremento punteggio per ostacoli volanti
                     obs.passed = true;
@@ -1120,8 +1397,31 @@ function drawBottle(bottle) {
             chicoY += chicoVY;
             drawChico(chicoY);
 
-            if (!isSafeStartActive() && (chicoY + CHICO_RADIUS > canvas.height || chicoY - CHICO_RADIUS < 0)) {
-                gameOver = true;
+            if (chicoY + CHICO_RADIUS > canvas.height || chicoY - CHICO_RADIUS < 0) {
+                if (hasShield) {
+                    consumeShieldEffect();
+                    chicoVY = chicoY + CHICO_RADIUS > canvas.height ? -6 : 4;
+                } else if (!isSafeStartActive() && Date.now() >= shieldInvulnUntil) {
+                    gameOver = true;
+                }
+                chicoY = Math.min(Math.max(chicoY, CHICO_RADIUS + 2), canvas.height - CHICO_RADIUS - 2);
+            }
+
+            // Gestione oggetti scudo
+            for (let i = shieldItems.length - 1; i >= 0; i--) {
+                const item = shieldItems[i];
+                item.x -= obstacleSpeed * 0.9;
+                if (!item.collected) drawShieldItem(item);
+                if (!item.collected && Math.hypot(item.x - 80, item.y - chicoY) < CHICO_RADIUS + SHIELD_RADIUS) {
+                    item.collected = true;
+                    hasShield = true;
+                    shieldCharges = SHIELD_HITS;
+                    shieldInvulnUntil = Date.now() + 120; // breve tolleranza subito dopo raccolta
+                    spawnParticles(item.x, item.y, '#8fd8ff');
+                }
+                if (item.collected || item.x + SHIELD_RADIUS < -12) {
+                    shieldItems.splice(i,1);
+                }
             }
 
             document.getElementById('score').textContent = `RUM: ${score}`;
@@ -1165,6 +1465,11 @@ function drawBottle(bottle) {
                 resetObstacles();
                 resetBottles();
                 resetFlyingObstacles();
+                shieldItems = [];
+                hasShield = false;
+                shieldCharges = 0;
+                shieldBreakingEnd = 0;
+                shieldInvulnUntil = 0;
                 gameLoop();
             }
         }
@@ -1177,6 +1482,11 @@ function drawBottle(bottle) {
     resetObstacles();
     resetBottles();
     resetFlyingObstacles();
+    shieldItems = [];
+    hasShield = false;
+    shieldCharges = 0;
+    shieldBreakingEnd = 0;
+    shieldInvulnUntil = 0;
     hasStarted = false;
     showHint = true;
     safeStartEndTime = 0;
