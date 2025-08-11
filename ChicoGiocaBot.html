@@ -214,7 +214,7 @@
         // Parallax: navi/isole
         const parallaxElements = [
             {x: 70, y: 420, w: 90, h: 40, type: 'island'},
-            {x: 320, y: 350, w: 70, h: 30, type: 'ship'}
+            {x: 320, y: 545, w: 70, h: 30, type: 'ship'} 
         ];
         // --- Nuvole di sfondo (alto) ---
         const MAX_CLOUDS = 6;
@@ -355,6 +355,53 @@
                 }
                 ctx.restore();
             }
+            // --- Mare in basso (parallax animato) ---
+            drawSeaParallax();
+        }
+
+        // Mare: onde che scorrono orizzontalmente
+        function drawSeaParallax() {
+            const t = Date.now() / 1000;
+            const baseY = canvas.height - 38;
+            const h = 38;
+            const waveLen = 110;
+            const amp = 7;
+            const speed = 32; // px/sec
+            ctx.save();
+            ctx.globalAlpha = 0.82;
+            // Onda principale
+            ctx.beginPath();
+            for (let x = 0; x <= canvas.width+2; x += 2) {
+                const y = baseY + Math.sin((x + t*speed) / waveLen) * amp + Math.sin((x - t*speed*0.7) / (waveLen*0.6)) * 2.5;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.lineTo(0, canvas.height);
+            ctx.closePath();
+            // Gradiente azzurro trasparente
+            const grad = ctx.createLinearGradient(0, baseY, 0, canvas.height);
+            grad.addColorStop(0, '#b3e6ff');
+            grad.addColorStop(0.5, '#5ec6e6');
+            grad.addColorStop(1, 'rgba(0,80,180,0.85)');
+            ctx.fillStyle = grad;
+            ctx.shadowColor = '#b3e6ff';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            // Cresta bianca semitrasparente
+            ctx.beginPath();
+            for (let x = 0; x <= canvas.width+2; x += 4) {
+                const y = baseY + Math.sin((x + t*speed) / waveLen) * amp - 2;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+            ctx.lineWidth = 2.2;
+            ctx.shadowColor = 'rgba(255,255,255,0.18)';
+            ctx.shadowBlur = 6;
+            ctx.stroke();
+            ctx.restore();
         }
 
         function drawHintOverlay() {
