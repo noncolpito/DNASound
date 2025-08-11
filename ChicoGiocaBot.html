@@ -149,10 +149,42 @@
             .diffPanel { padding: 24px 20px 32px; }
             #score { font-size: 1.4em; }
         }
+        #fireBtn {
+            position: absolute;
+            bottom: 18px;
+            left: 16px;
+            z-index: 12;
+            width: 70px;
+            height: 70px;
+            border-radius: 18px;
+            border: 3px solid rgba(255,255,255,0.4);
+            background: radial-gradient(circle at 30% 30%, #ffe27a, #ff9f1c 65%, #cc6d00);
+            color: #4b2200;
+            font-size: 28px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 18px -6px rgba(0,0,0,0.6), 0 0 0 3px rgba(0,0,0,0.3) inset;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.6);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #fireBtn:active { transform: scale(.95); }
+        #ammoDisplay {
+            position: absolute;
+            bottom: 94px;
+            left: 22px;
+            font-size: 22px;
+            color: #fff;
+            text-shadow: 2px 2px 4px #000;
+            letter-spacing: 2px;
+            z-index: 12;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div id="score">RUM: 0</div>
+    <div id="ammoDisplay" aria-label="Munizioni"></div>
     <button id="diffGearBtn" aria-label="Cambia difficoltà" title="Difficoltà">⚙️</button>
     <div id="difficultyOverlay" role="dialog" aria-modal="true">
         <div class="diffPanel">
@@ -168,6 +200,7 @@
         </div>
     </div>
     <button id="muteBtn" aria-label="Toggle audio" title="Audio">🔊</button>
+    <button id="fireBtn" aria-label="Spara" title="Spara">🌽</button>
     <canvas id="gameCanvas" width="400" height="600"></canvas>
     <script>
         // Costanti di gioco
@@ -224,6 +257,16 @@
     const SHIELD_BREAK_DURATION = 600; // ms animazione rottura (invulnerabile)
         // Particelle scintille
         let particles = [];
+    // --- Munizioni & proiettili (chicchi di mais) ---
+    const MAX_AMMO = 3;
+    let ammo = MAX_AMMO;
+    let projectiles = []; // {x,y,vx,vy,r}
+    // Corn pickups (pannocchie)
+    const CORN_RADIUS = 18;
+    let cornItems = []; // {x,y,collected:false}
+    let lastCornSpawnScore = 0;
+    const CORN_MIN_SCORE_GAP = 5; // distanza minima in punteggio prima di poter spawnare una nuova pannocchia
+    const CORN_SPAWN_CHANCE = 0.35; // probabilità per frame quando eleggibile
         // Parallax: navi/isole
         const parallaxElements = [
             {x: 70, y: 420, w: 90, h: 40, type: 'island'},
@@ -743,6 +786,106 @@ function drawFlyingObstacle(obs) {
         ctx.restore(); // fine ramo gabbiano
     } // close else branch
     ctx.restore(); // restore outer save
+}
+// ====== Proiettili (chicchi di mais) ======
+function fire() {
+    if (!hasStarted || gameOver) return;
+    if (ammo <= 0) return;
+    ammo--;
+    // posiziona proiettile davanti a Chico
+    const px = 80 + CHICO_RADIUS - 4;
+    const py = chicoY;
+    projectiles.push({ x: px, y: py, vx: 6.2, vy: 0, r: 6, born: Date.now() });
+    spawnParticles(px, py, '#ffd34d');
+}
+function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        // disegna
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        const g = ctx.createRadialGradient(0,0,1,0,0,p.r);
+        g.addColorStop(0,'#fffacd');
+        g.addColorStop(0.4,'#ffe066');
+        g.addColorStop(1,'#d48806');
+        ctx.beginPath();
+        ctx.arc(0,0,p.r,0,Math.PI*2);
+        ctx.fillStyle = g;
+        ctx.shadowColor = '#ffef9a';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.restore();
+        // collisione con ostacoli volanti
+        for (let j = flyingObstacles.length - 1; j >= 0; j--) {
+            const fo = flyingObstacles[j];
+            if (p.x + p.r > fo.x && p.x - p.r < fo.x + FLYING_OBSTACLE_WIDTH && p.y + p.r > fo.y && p.y - p.r < fo.y + FLYING_OBSTACLE_HEIGHT) {
+                // distruggi ostacolo
+                spawnParticles(fo.x + FLYING_OBSTACLE_WIDTH/2, fo.y + FLYING_OBSTACLE_HEIGHT/2, '#ffcf4d');
+                flyingObstacles.splice(j,1);
+                projectiles.splice(i,1);
+                break;
+            }
+        }
+        // rimuovi se fuori schermo
+        if (projectiles[i] && (p.x - p.r > canvas.width + 40)) {
+            projectiles.splice(i,1);
+        }
+    }
+}
+
+// ====== Corn pickup (pannocchia) ======
+function spawnCornMaybe() {
+    if (!hasStarted || gameOver) return;
+    if (score - lastCornSpawnScore < CORN_MIN_SCORE_GAP) return;
+    if (Math.random() < CORN_SPAWN_CHANCE / 60) { // mitigazione frame-rate
+        const y = 90 + Math.random() * (canvas.height - 250);
+        cornItems.push({ x: canvas.width + 40, y, collected: false });
+        lastCornSpawnScore = score;
+    }
+}
+function drawCornItem(item) {
+    ctx.save();
+    const bob = Math.sin((Date.now()+ item.x*30)/500)*3;
+    ctx.translate(item.x, item.y + bob);
+    // pannocchia stilizzata
+    ctx.beginPath();
+    ctx.ellipse(0,0,CORN_RADIUS*0.55,CORN_RADIUS*0.9,0,0,Math.PI*2);
+    const grad = ctx.createLinearGradient(0,-CORN_RADIUS,0,CORN_RADIUS);
+    grad.addColorStop(0,'#fff59d');
+    grad.addColorStop(1,'#f1c40f');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#c49000';
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    // grani (puntini)
+    ctx.fillStyle = 'rgba(255,165,0,0.55)';
+    for (let i=0;i<10;i++) {
+        ctx.beginPath();
+        ctx.arc((Math.random()-0.5)*CORN_RADIUS*0.6,(Math.random()-0.5)*CORN_RADIUS*1.2,1.2,0,Math.PI*2);
+        ctx.fill();
+    }
+    // foglie verdi
+    ctx.restore();
+}
+// (Versione semplificata pannocchia senza foglie dettagliate)
+function drawCornItem(item) {
+    ctx.save();
+    const bob = Math.sin((Date.now()+ item.x*30)/500)*3;
+    ctx.translate(item.x, item.y + bob);
+    ctx.beginPath();
+    ctx.ellipse(0,0,CORN_RADIUS*0.55,CORN_RADIUS*0.9,0,0,Math.PI*2);
+    const grad = ctx.createLinearGradient(0,-CORN_RADIUS,0,CORN_RADIUS);
+    grad.addColorStop(0,'#fff59d');
+    grad.addColorStop(1,'#f1c40f');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#c49000';
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
 }
 
 function drawChico(y) {
@@ -1306,6 +1449,8 @@ function drawBottle(bottle) {
             updateDifficulty();
             // Possibile spawn scudo
             spawnShieldMaybe();
+            // Possibile spawn pannocchia
+            spawnCornMaybe();
             // Ostacoli (barili a terra/cielo)
             for (let i = 0; i < obstacles.length; i++) {
                 let obs = obstacles[i];
@@ -1420,7 +1565,27 @@ function drawBottle(bottle) {
                 }
             }
 
+            // Gestione pannocchie (corn)
+            for (let i = cornItems.length - 1; i >= 0; i--) {
+                const item = cornItems[i];
+                item.x -= obstacleSpeed * 0.95;
+                if (!item.collected) drawCornItem(item);
+                if (!item.collected && Math.hypot(item.x - 80, item.y - chicoY) < CHICO_RADIUS + CORN_RADIUS) {
+                    item.collected = true;
+                    ammo = Math.min(MAX_AMMO, ammo + 1);
+                    spawnParticles(item.x, item.y, '#ffe066');
+                }
+                if (item.collected || item.x + CORN_RADIUS < -20) {
+                    cornItems.splice(i,1);
+                }
+            }
+
+            // Proiettili
+            updateProjectiles();
+
             document.getElementById('score').textContent = `RUM: ${score}`;
+            const ammoDisp = document.getElementById('ammoDisplay');
+            if (ammoDisp) ammoDisp.textContent = '🌽'.repeat(ammo);
             if (!gameOver) {
                 requestAnimationFrame(gameLoop);
             } else {
@@ -1466,6 +1631,13 @@ function drawBottle(bottle) {
                 shieldCharges = 0;
                 shieldBreakingEnd = 0;
                 shieldInvulnUntil = 0;
+                // reset shooting
+                ammo = MAX_AMMO;
+                projectiles = [];
+                cornItems = [];
+                lastCornSpawnScore = 0;
+                const ammoDisp = document.getElementById('ammoDisplay');
+                if (ammoDisp) ammoDisp.textContent = '🌽'.repeat(ammo);
                 gameLoop();
             }
         }
@@ -1496,6 +1668,10 @@ function drawBottle(bottle) {
             diffOverlay.style.display = 'flex';
         }
     });
+    document.getElementById('fireBtn').addEventListener('click', fire);
+    document.getElementById('fireBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); fire(); }, { passive:false });
+    // Opzionale: tastiera per debug
+    window.addEventListener('keydown', (e)=>{ if (e.code === 'KeyF') fire(); });
     diffButtonsWrap.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-diff]');
         if (!btn) return;
@@ -1509,6 +1685,8 @@ function drawBottle(bottle) {
     });
     // Stato iniziale: difficoltà normale selezionata visivamente ma non confermata -> richiede scelta
     difficultyChosen = false;
+    // Inizializza munizioni visualizzate
+    document.getElementById('ammoDisplay').textContent = '🌽'.repeat(ammo);
     gameLoop();
     </script>
 </body>
