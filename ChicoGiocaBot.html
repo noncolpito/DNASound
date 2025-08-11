@@ -31,6 +31,11 @@
             font-size: 2em;
             color: #fff;
             text-shadow: 2px 2px 4px #000;
+            padding: 6px 18px;
+            background: rgba(0,0,0,0.25);
+            border: 2px solid rgba(255,255,255,0.25);
+            border-radius: 14px;
+            backdrop-filter: blur(6px) saturate(140%);
         }
         #muteBtn {
             position: absolute;
@@ -48,17 +53,128 @@
             text-shadow: 1px 1px 2px #000;
         }
         #muteBtn:active { transform: scale(0.98); }
+        #diffGearBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            border: 2px solid #222;
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            font-size: 18px;
+            line-height: 1;
+            padding: 8px 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #diffGearBtn:active { transform: scale(0.95); }
+        #difficultyOverlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.55));
+            backdrop-filter: blur(10px) saturate(140%);
+            -webkit-backdrop-filter: blur(10px) saturate(140%);
+            z-index: 20;
+            color: #fff;
+            text-align: center;
+            padding: 30px 20px 60px;
+        }
+        .diffPanel {
+            max-width: 340px;
+            width: 82%;
+            background: rgba(0,0,0,0.45);
+            border: 2px solid rgba(255,255,255,0.25);
+            border-radius: 28px;
+            padding: 28px 24px 34px;
+            box-shadow: 0 6px 28px -8px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08) inset;
+            position: relative;
+        }
+        .diffPanel h1 {
+            font-size: 40px;
+            margin: 0 0 12px;
+            letter-spacing: 1px;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.6);
+        }
+        .diffPanel p.subtitle {
+            margin: 0 0 18px;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            opacity: 0.9;
+        }
+        .diffButtons { display: flex; gap: 14px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+        .diffButtons button {
+            flex: 1 1 90px;
+            background: linear-gradient(160deg, #ffcc47, #ff8c00);
+            border: none;
+            border-radius: 18px;
+            padding: 14px 8px 12px;
+            color: #222;
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 4px 14px -4px rgba(0,0,0,0.6);
+            transition: transform .18s, box-shadow .18s, background .4s;
+        }
+        .diffButtons button span.small {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            opacity: 0.75;
+            margin-top: 4px;
+        }
+        .diffButtons button.easy { background: linear-gradient(150deg,#7dffa0,#12d65b); }
+        .diffButtons button.normal { background: linear-gradient(150deg,#51c6ff,#0066ff); color: #fff; }
+        .diffButtons button.hard { background: linear-gradient(150deg,#ff5f89,#d4002f); color: #fff; }
+        .diffButtons button:hover { transform: translateY(-4px); box-shadow: 0 10px 22px -10px rgba(0,0,0,0.9); }
+        .diffButtons button:active { transform: translateY(1px); }
+        .diffButtons button.active { outline: 3px solid rgba(255,255,255,0.9); }
+        .diffInfo {
+            font-size: 12px;
+            line-height: 1.45;
+            opacity: 0.85;
+            padding: 0 8px;
+            margin-top: 4px;
+        }
+        .tapHintInline { margin-top: 18px; font-size: 14px; opacity: 0.85; }
+        @media (max-width: 480px){
+            .diffPanel h1 { font-size: 32px; }
+            .diffPanel { padding: 24px 20px 32px; }
+            #score { font-size: 1.4em; }
+        }
     </style>
 </head>
 <body>
     <div id="score">RUM: 0</div>
+    <button id="diffGearBtn" aria-label="Cambia difficoltà" title="Difficoltà">⚙️</button>
+    <div id="difficultyOverlay" role="dialog" aria-modal="true">
+        <div class="diffPanel">
+            <h1>Flappy Chico</h1>
+            <p class="subtitle">Scegli la difficoltà</p>
+            <div class="diffButtons" id="diffButtons">
+                <button class="easy" data-diff="facile">Facile<span class="small">Gap ampio</span></button>
+                <button class="normal active" data-diff="normale">Normale<span class="small">Esperienza base</span></button>
+                <button class="hard" data-diff="difficile">Difficile<span class="small">Sfida!</span></button>
+            </div>
+            <div class="diffInfo" id="diffInfo">Normale: equilibrio tra velocità e spazio. Puoi cambiare prima di iniziare.</div>
+            <div class="tapHintInline">Dopo aver scelto: TAP per volare</div>
+        </div>
+    </div>
     <button id="muteBtn" aria-label="Toggle audio" title="Audio">🔊</button>
     <canvas id="gameCanvas" width="400" height="600"></canvas>
     <script>
         // Costanti di gioco
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-    const GRAVITY = 0.42;
+    const GRAVITY_BASE = 0.42; // val base normal
+        let gravity = GRAVITY_BASE;
         const FLAP = -8;
         const CHICO_RADIUS = 24;
         let chicoY = canvas.height / 2;
@@ -73,11 +189,21 @@
 
         // Ostacoli (barili)
         const OBSTACLE_WIDTH = 60;
-    const OBSTACLE_GAP = 320;
-    const OBSTACLE_SPEED = 2.4;
-    // Difficoltà dinamica
-    let obstacleGap = OBSTACLE_GAP;
-    let obstacleSpeed = OBSTACLE_SPEED;
+    const OBSTACLE_GAP_DEFAULT = 320;
+    const OBSTACLE_SPEED_DEFAULT = 2.4;
+    // Difficoltà dinamica (basata su difficoltà scelta)
+    let obstacleGap = OBSTACLE_GAP_DEFAULT;
+    let obstacleSpeed = OBSTACLE_SPEED_DEFAULT;
+    let baseObstacleGap = OBSTACLE_GAP_DEFAULT;
+    let baseObstacleSpeed = OBSTACLE_SPEED_DEFAULT;
+    let diffScale = 1.0; // modifica quanto la difficoltà cresce col punteggio
+    const DIFFICULTIES = {
+        'facile':   { gap: 360, speed: 2.0, gravity: 0.38, dynamicScale: 0.85, desc: 'Più spazio, movimento lento.' },
+        'normale':  { gap: 320, speed: 2.4, gravity: 0.42, dynamicScale: 1.0,  desc: 'Equilibrio tra spazio e velocità.' },
+        'difficile':{ gap: 280, speed: 2.8, gravity: 0.46, dynamicScale: 1.18, desc: 'Spazio ridotto, cresce più in fretta.' }
+    };
+    let currentDifficulty = 'normale';
+    let difficultyChosen = false;
         let obstacles = [];
 
         // Bottiglie di rum
@@ -90,6 +216,74 @@
             {x: 70, y: 420, w: 90, h: 40, type: 'island'},
             {x: 320, y: 350, w: 70, h: 30, type: 'ship'}
         ];
+        // --- Nuvole di sfondo (alto) ---
+        const MAX_CLOUDS = 6;
+        let clouds = [];
+        function createCloud(x) {
+            const w = 90 + Math.random() * 120;
+            const h = 26 + Math.random() * 24;
+            const y = 18 + Math.random() * 110; // fascia alta
+            const speed = 0.15 + Math.random() * 0.22; // lenta
+            const lobes = 3 + Math.floor(Math.random() * 3); // 3-5
+            const lobeData = [];
+            const spacing = w / (lobes + 1);
+            for (let i = 0; i < lobes; i++) {
+                const lx = -w/2 + spacing * (i+1);
+                const ly = (Math.random()*0.4 - 0.2) * h * 0.4;
+                const rw = spacing * (0.9 + Math.random()*0.3);
+                const rh = h * (0.35 + Math.random()*0.25);
+                lobeData.push({ lx, ly, rw, rh });
+            }
+            return { x, y, w, h, speed, lobes, lobeData };
+        }
+        function resetClouds() {
+            clouds = [];
+            let cursor = 0;
+            while (clouds.length < MAX_CLOUDS) {
+                clouds.push(createCloud(cursor));
+                cursor += 130 + Math.random() * 160;
+            }
+        }
+        function drawClouds() {
+            for (let c of clouds) {
+                c.x -= c.speed; // movimento continuo
+                if (c.x + c.w < -60) {
+                    const lastX = clouds.reduce((m,cl)=>Math.max(m,cl.x), -Infinity);
+                    c.x = Math.max(canvas.width + 80, lastX + 140 + Math.random()*100);
+                    c.y = 18 + Math.random() * 110;
+                    c.w = 90 + Math.random() * 120;
+                    c.h = 26 + Math.random() * 24;
+                    c.speed = 0.15 + Math.random() * 0.22;
+                    const lobes = 3 + Math.floor(Math.random() * 3);
+                    c.lobes = lobes;
+                    c.lobeData = [];
+                    const spacing = c.w / (lobes + 1);
+                    for (let i = 0; i < lobes; i++) {
+                        const lx = -c.w/2 + spacing * (i+1);
+                        const ly = (Math.random()*0.4 - 0.2) * c.h * 0.4;
+                        const rw = spacing * (0.9 + Math.random()*0.3);
+                        const rh = c.h * (0.35 + Math.random()*0.25);
+                        c.lobeData.push({ lx, ly, rw, rh });
+                    }
+                }
+                ctx.save();
+                ctx.translate(c.x + c.w/2, c.y + c.h/2);
+                ctx.beginPath();
+                for (let i = 0; i < c.lobeData.length; i++) {
+                    const L = c.lobeData[i];
+                    const bob = Math.sin((Date.now()/1600) + (c.x + i*23) * 0.002) * 2;
+                    ctx.ellipse(L.lx, L.ly + bob, L.rw, L.rh, 0, 0, Math.PI*2);
+                }
+                const grad = ctx.createLinearGradient(-c.w/2, -c.h/2, -c.w/2, c.h/2);
+                grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+                grad.addColorStop(1, 'rgba(255,255,255,0.60)');
+                ctx.fillStyle = grad;
+                ctx.shadowColor = 'rgba(255,255,255,0.9)';
+                ctx.shadowBlur = 14;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
         function drawParallax() {
             for (let elem of parallaxElements) {
                 ctx.save();
@@ -276,10 +470,12 @@
             obstacles = [createObstacle(canvas.width)];
         }
         function createObstacle(x) {
+            // Usa l'obstacleGap attuale come ampiezza per questo ostacolo (così resta consistente se la difficoltà cambia dopo)
+            const gapSize = obstacleGap;
             const minGap = 60;
-            const maxGap = canvas.height - 60 - obstacleGap;
+            const maxGap = canvas.height - 60 - gapSize;
             const gapY = Math.floor(Math.random() * (maxGap - minGap + 1)) + minGap;
-            return { x: x, gapY: gapY, passed: false };
+            return { x: x, gapY: gapY, gap: gapSize, passed: false };
         }
 
         function resetBottles() {
@@ -725,27 +921,58 @@ function drawBottle(bottle) {
 }
 
         function drawObstacle(obs) {
+            const gapSize = obs.gap !== undefined ? obs.gap : obstacleGap; // fallback se vecchio oggetto
             ctx.save();
             ctx.fillStyle = '#8B5A2B';
             ctx.fillRect(obs.x, 0, OBSTACLE_WIDTH, obs.gapY);
-            ctx.fillRect(obs.x, obs.gapY + OBSTACLE_GAP, OBSTACLE_WIDTH, canvas.height - obs.gapY - OBSTACLE_GAP);
+            ctx.fillRect(obs.x, obs.gapY + gapSize, OBSTACLE_WIDTH, canvas.height - obs.gapY - gapSize);
             ctx.strokeStyle = '#654321';
             ctx.lineWidth = 4;
             ctx.strokeRect(obs.x, 0, OBSTACLE_WIDTH, obs.gapY);
-            ctx.strokeRect(obs.x, obs.gapY + OBSTACLE_GAP, OBSTACLE_WIDTH, canvas.height - obs.gapY - OBSTACLE_GAP);
+            ctx.strokeRect(obs.x, obs.gapY + gapSize, OBSTACLE_WIDTH, canvas.height - obs.gapY - gapSize);
             ctx.restore();
         }
 
         function updateDifficulty() {
-            // Incrementa velocità e riduci gap con il punteggio (limiti inclusi)
-            const speedBoost = Math.min(score * 0.05, 1.8);
-            obstacleSpeed = OBSTACLE_SPEED + speedBoost;
-            obstacleGap = Math.max(220, OBSTACLE_GAP - score * 2);
+            // scala progressione in base alla difficoltà selezionata
+            const speedBoost = Math.min(score * 0.05 * diffScale, 1.8 * diffScale);
+            obstacleSpeed = baseObstacleSpeed + speedBoost;
+            // limite minimo dinamico (non meno di base-120 e non meno di 200)
+            const minGap = Math.max(baseObstacleGap - 120, 200);
+            obstacleGap = Math.max(minGap, baseObstacleGap - score * 2 * diffScale);
         }
+
+        function applyDifficulty(key) {
+            if (!DIFFICULTIES[key]) return;
+            currentDifficulty = key;
+            const cfg = DIFFICULTIES[key];
+            baseObstacleGap = cfg.gap;
+            baseObstacleSpeed = cfg.speed;
+            gravity = cfg.gravity;
+            diffScale = cfg.dynamicScale;
+            obstacleGap = baseObstacleGap;
+            obstacleSpeed = baseObstacleSpeed;
+            // reset elementi per coerenza visiva pre-start
+            resetObstacles();
+            resetBottles();
+            resetFlyingObstacles();
+            chicoY = canvas.height / 2;
+            chicoVY = 0;
+            score = 0;
+            gameOver = false;
+            hasStarted = false;
+            showHint = true;
+            safeStartEndTime = 0;
+            difficultyChosen = true; // abilitato avvio
+            const info = document.getElementById('diffInfo');
+            if (info) info.textContent = capitalizeFirst(key) + ': ' + cfg.desc + ' TAP per iniziare!';
+        }
+        function capitalizeFirst(s){return s.charAt(0).toUpperCase()+s.slice(1);}        
 
         function gameLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawParallax();
+                drawClouds();
+                drawParallax();
             drawParticles();
 
             // Fase pre-avvio: scena statica con suggerimento
@@ -776,7 +1003,8 @@ function drawBottle(bottle) {
                     80 + CHICO_RADIUS > obs.x &&
                     80 - CHICO_RADIUS < obs.x + OBSTACLE_WIDTH
                 ) {
-                    if (!isSafeStartActive() && (chicoY - CHICO_RADIUS < obs.gapY || chicoY + CHICO_RADIUS > obs.gapY + obstacleGap)) {
+                    const gapSizeColl = obs.gap !== undefined ? obs.gap : obstacleGap;
+                    if (!isSafeStartActive() && (chicoY - CHICO_RADIUS < obs.gapY || chicoY + CHICO_RADIUS > obs.gapY + gapSizeColl)) {
                         gameOver = true;
                     }
                 }
@@ -841,7 +1069,7 @@ function drawBottle(bottle) {
             }
 
             // Chico physics
-            chicoVY += GRAVITY;
+            chicoVY += gravity;
             chicoY += chicoVY;
             drawChico(chicoY);
 
@@ -863,6 +1091,8 @@ function drawBottle(bottle) {
         }
 
         function flap() {
+            // richiede prima la scelta della difficoltà
+            if (!difficultyChosen) return;
             if (!hasStarted && !gameOver) {
                 hasStarted = true;
                 showHint = false;
@@ -882,6 +1112,7 @@ function drawBottle(bottle) {
                 score = 0;
                 gameOver = false;
                 hasStarted = false;
+                resetClouds();
                 showHint = true;
                 safeStartEndTime = 0;
                 resetObstacles();
@@ -890,6 +1121,7 @@ function drawBottle(bottle) {
                 gameLoop();
             }
         }
+    resetClouds();
     // Input solo touch/mouse (mobile friendly)
     canvas.addEventListener('mousedown', flap);
     canvas.addEventListener('touchstart', (e) => { e.preventDefault(); flap(); }, { passive: false });
@@ -901,8 +1133,29 @@ function drawBottle(bottle) {
     hasStarted = false;
     showHint = true;
     safeStartEndTime = 0;
-    // Inizializza pulsante muto
+    // Inizializza pulsanti UI
     document.getElementById('muteBtn').addEventListener('click', toggleMute);
+    const diffOverlay = document.getElementById('difficultyOverlay');
+    const diffButtonsWrap = document.getElementById('diffButtons');
+    const diffInfo = document.getElementById('diffInfo');
+    document.getElementById('diffGearBtn').addEventListener('click', () => {
+        if (!hasStarted) {
+            diffOverlay.style.display = 'flex';
+        }
+    });
+    diffButtonsWrap.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-diff]');
+        if (!btn) return;
+        [...diffButtonsWrap.querySelectorAll('button')].forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const key = btn.getAttribute('data-diff');
+        applyDifficulty(key);
+        if (diffInfo) diffInfo.textContent = capitalizeFirst(key) + ': ' + DIFFICULTIES[key].desc + ' TAP per iniziare!';
+        // nascondi overlay subito dopo la scelta
+        diffOverlay.style.display = 'none';
+    });
+    // Stato iniziale: difficoltà normale selezionata visivamente ma non confermata -> richiede scelta
+    difficultyChosen = false;
     gameLoop();
     </script>
 </body>
