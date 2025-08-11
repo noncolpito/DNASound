@@ -139,6 +139,54 @@
             z-index: 12;
             pointer-events: none;
         }
+        /* Overlay difficoltà centrato */
+        #difficultyOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.45);
+            z-index: 30;
+        }
+        #diffGearBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            font-size: 24px;
+            line-height: 1;
+            border: 2px solid #222;
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            box-shadow: 0 0 20px #222;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px #000;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: transform .18s, box-shadow .18s;
+        }
+        #diffGearBtn:active { transform: scale(0.98); }
+        .diffPanel {
+            background: rgba(0,0,0,0.55);
+            padding: 36px 44px 46px;
+            border: 3px solid rgba(255,255,255,0.25);
+            border-radius: 28px;
+            box-shadow: 0 10px 28px -6px rgba(0,0,0,0.7), 0 0 0 4px rgba(255,255,255,0.07) inset;
+            backdrop-filter: blur(10px) saturate(140%);
+            max-width: 360px;
+            text-align: center;
+            color: #fff;
+        }
+        @media (max-width: 480px){
+            .diffPanel { padding: 28px 24px 38px; border-radius: 24px; }
+        }
     </style>
 </head>
 <body>
@@ -165,9 +213,9 @@
         // Costanti di gioco
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-    const GRAVITY_BASE = 0.42; // val base normal
+    const GRAVITY_BASE = 0.33; // val base normal (ridotto)
         let gravity = GRAVITY_BASE;
-    const FLAP = -6.5;
+    const FLAP = -5.2; // salto meno potente
         const CHICO_RADIUS = 24;
         let chicoY = canvas.height / 2;
         let chicoVY = 0;
@@ -190,9 +238,9 @@
     let baseObstacleSpeed = OBSTACLE_SPEED_DEFAULT;
     let diffScale = 1.0; // modifica quanto la difficoltà cresce col punteggio
     const DIFFICULTIES = {
-        'facile':   { gap: 380, speed: 1.55, gravity: 0.31, dynamicScale: 0.70, desc: 'Gap molto ampio, ostacoli lenti, Chico leggero.' },
-        'normale':  { gap: 320, speed: 2.4, gravity: 0.42, dynamicScale: 1.0,  desc: 'Equilibrio tra spazio e velocità.' },
-        'difficile':{ gap: 250, speed: 3.35, gravity: 0.54, dynamicScale: 1.32, desc: 'Gap stretto, ostacoli veloci, Chico pesante.' }
+        'facile':   { gap: 380, speed: 1.55, gravity: 0.24, dynamicScale: 0.70, desc: 'Gap molto ampio, ostacoli lenti, Chico leggero.' },
+        'normale':  { gap: 320, speed: 2.4, gravity: 0.33, dynamicScale: 1.0,  desc: 'Equilibrio tra spazio e velocità.' },
+        'difficile':{ gap: 250, speed: 3.35, gravity: 0.41, dynamicScale: 1.32, desc: 'Gap stretto, ostacoli veloci, Chico pesante.' }
     };
     let currentDifficulty = 'normale';
     let difficultyChosen = false;
