@@ -52,48 +52,7 @@
             cursor: pointer;
             text-shadow: 1px 1px 2px #000;
         }
-        #muteBtn:active { transform: scale(0.98); }
-        #diffGearBtn {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 10;
-            border: 2px solid #222;
-            background: rgba(0,0,0,0.45);
-            color: #fff;
-            font-size: 18px;
-            line-height: 1;
-            padding: 8px 10px;
-            border-radius: 50%;
-            cursor: pointer;
-            text-shadow: 1px 1px 2px #000;
-        }
-        #diffGearBtn:active { transform: scale(0.95); }
-        #difficultyOverlay {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.15), rgba(0,0,0,0.55));
-            backdrop-filter: blur(10px) saturate(140%);
-            -webkit-backdrop-filter: blur(10px) saturate(140%);
-            z-index: 20;
-            color: #fff;
-            text-align: center;
-            padding: 30px 20px 60px;
-        }
-        .diffPanel {
-            max-width: 340px;
-            width: 82%;
-            background: rgba(0,0,0,0.45);
-            border: 2px solid rgba(255,255,255,0.25);
-            border-radius: 28px;
-            padding: 28px 24px 34px;
-            box-shadow: 0 6px 28px -8px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08) inset;
-            position: relative;
-        }
+    #muteBtn:active { transform: scale(0.98); }
         .diffPanel h1 {
             font-size: 40px;
             margin: 0 0 12px;
@@ -795,12 +754,76 @@ function fire() {
     // posiziona proiettile davanti a Chico
     const px = 80 + CHICO_RADIUS - 4;
     const py = chicoY;
-    projectiles.push({ x: px, y: py, vx: 6.2, vy: 0, r: 6, born: Date.now() });
+    // AUTO-MIRA: cerca il bersaglio volante più vicino in avanti
+    let target = null;
+    let bestDist = Infinity;
+    const shooterX = px;
+    for (const fo of flyingObstacles) {
+        const cx = fo.x + FLYING_OBSTACLE_WIDTH/2;
+        const cy = fo.y + FLYING_OBSTACLE_HEIGHT/2;
+        // Considera solo quelli davanti a Chico
+        if (cx <= shooterX) continue;
+        const dx = cx - shooterX;
+        const dy = cy - py;
+        const dist = Math.hypot(dx, dy);
+        if (dist < bestDist) {
+            bestDist = dist;
+            target = { cx, cy };
+        }
+    }
+    // Se nessun bersaglio volante, come fallback mira dritto
+    const SPEED = 7.2; // velocità proiettile
+    let vx = 6.2, vy = 0; // default
+    if (target) {
+        let dx = target.cx - shooterX;
+        let dy = target.cy - py;
+        const len = Math.hypot(dx, dy) || 1;
+        vx = (dx / len) * SPEED;
+        vy = (dy / len) * SPEED;
+        // assicura che vada comunque avanti abbastanza velocemente
+        if (vx < 3) {
+            const boost = 3 - vx;
+            const scale = (SPEED + boost) / SPEED;
+            vx *= scale;
+            vy *= scale;
+        }
+    }
+    projectiles.push({ x: px, y: py, vx, vy, r: 6, born: Date.now(), target });
     spawnParticles(px, py, '#ffd34d');
 }
 function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
+        // Se ha un target e esiste ancora qualche ostacolo volante, ritocca la mira (leggera homing)
+        if (p.target) {
+            // trova ostacolo più vicino alla posizione target memorizzata (o aggiorna se manca)
+            let closest = null;
+            let best = Infinity;
+            for (const fo of flyingObstacles) {
+                const cx = fo.x + FLYING_OBSTACLE_WIDTH/2;
+                const cy = fo.y + FLYING_OBSTACLE_HEIGHT/2;
+                if (cx < p.x) continue; // ignora quelli ormai dietro al proiettile
+                const d = Math.hypot(cx - p.x, cy - p.y);
+                if (d < best) { best = d; closest = { cx, cy }; }
+            }
+            if (closest) {
+                // interpolazione verso il nuovo vettore
+                const SPEED = Math.hypot(p.vx, p.vy) || 7.2;
+                let dx = closest.cx - p.x;
+                let dy = closest.cy - p.y;
+                const len = Math.hypot(dx, dy) || 1;
+                dx /= len; dy /= len;
+                // blending per non cambiare direzione troppo bruscamente
+                const blend = 0.18; // 0=no homing, 1=aggancio totale
+                const curLen = Math.hypot(p.vx, p.vy) || SPEED;
+                let curdx = p.vx / curLen;
+                let curdy = p.vy / curLen;
+                const ndx = curdx*(1-blend) + dx*blend;
+                const ndy = curdy*(1-blend) + dy*blend;
+                p.vx = ndx * SPEED;
+                p.vy = ndy * SPEED;
+            }
+        }
         p.x += p.vx;
         p.y += p.vy;
         // disegna
@@ -829,7 +852,8 @@ function updateProjectiles() {
             }
         }
         // rimuovi se fuori schermo
-        if (projectiles[i] && (p.x - p.r > canvas.width + 40)) {
+    const TTL = 4000; // ms
+    if (projectiles[i] && ((p.x - p.r > canvas.width + 40) || Date.now() - p.born > TTL)) {
             projectiles.splice(i,1);
         }
     }
@@ -1671,7 +1695,12 @@ function drawBottle(bottle) {
     document.getElementById('fireBtn').addEventListener('click', fire);
     document.getElementById('fireBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); fire(); }, { passive:false });
     // Opzionale: tastiera per debug
-    window.addEventListener('keydown', (e)=>{ if (e.code === 'KeyF') fire(); });
+    window.addEventListener('keydown', (e)=>{
+        if (e.code === 'KeyF' || e.code === 'Space' || e.key === ' ' ) {
+            e.preventDefault();
+            fire();
+        }
+    });
     diffButtonsWrap.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-diff]');
         if (!btn) return;
