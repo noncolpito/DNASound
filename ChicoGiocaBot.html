@@ -1,4 +1,3 @@
-    
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -215,89 +214,96 @@
     <button id="muteBtn" aria-label="Toggle audio" title="Audio">🔊</button>
     <button id="fireBtn" aria-label="Spara" title="Spara">🌽</button>
     <canvas id="gameCanvas" width="400" height="600"></canvas>
-        <!-- Overlay tutorial -->
-            <div id="tutorialOverlay" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.72); color:#fff; font-size:1.25em; text-align:center;">
-                <div id="tutorialBox" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,30,30,0.92); border-radius:22px; padding:36px 28px 32px 28px; max-width:340px; width:90vw; box-shadow:0 8px 32px #000;">
-        <style>
-        @media (max-width: 600px) {
-            #tutorialBox {
-                max-width: 98vw !important;
-                width: 98vw !important;
-                padding: 22px 6vw 22px 6vw !important;
-                font-size: 1.08em !important;
-            }
-            #tutorialBox h2 {
-                font-size: 1.25em !important;
-            }
-            #tutorialBox ul {
-                font-size: 1em !important;
-            }
-            #closeTutorialBtn {
-                font-size: 1em !important;
-                padding: 10px 0 !important;
-                width: 100%;
-                min-width: 0;
-            }
-        }
-        </style>
-                <h2 style="margin-top:0; font-size:1.6em;">Come si gioca</h2>
-                <ul style="text-align:left; margin:0 0 18px 0; padding:0 0 0 18px; font-size:1em;">
-                    <li><b>Tocca</b> per volare 🕊️</li>
-                    <li>Raccogli <b>bottiglie di rum</b> <span style="font-size:1.2em;">🍾</span> per fare punti</li>
-                    <li>Evita <b>barili</b> e <b>gabbiani</b> <span style="font-size:1.2em;">🪵🐦</span></li>
-                    <li>Premi <b>🌽</b> per sparare ai gabbiani/barili volanti</li>
-                    <li>Raccogli <b>mais</b> <span style="font-size:1.2em;">🌽</span> per ricaricare i colpi</li>
-                    <li>Prendi lo <b>scudo</b> <span style="font-size:1.2em;">🛡️</span> per proteggerti da un colpo</li>
-                </ul>
-                <button id="closeTutorialBtn" style="margin-top:10px; font-size:1.1em; padding:8px 28px; border-radius:12px; border:none; background:#ffd700; color:#222; font-weight:bold; cursor:pointer; box-shadow:0 2px 8px #0006;">OK, inizia!</button>
+
+    <!-- Schermata Game Over -->
+    <div id="gameOverScreen" style="display:none; position:fixed; inset:0; z-index:1001; background:rgba(0,0,0,0.7); color:#fff; display:none; align-items:center; justify-content:center;">
+        <div style="background:rgba(30,30,30,0.92); border-radius:22px; padding:26px 20px 22px; width:90vw; max-width:360px; text-align:center; box-shadow:0 8px 32px #000;">
+            <h2 style="margin:0 0 8px;">Game Over</h2>
+            <p id="finalScoreText" style="margin:0 0 16px; font-size:18px;">Punteggio: 0</p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                <button id="restartBtn" style="background-color:#0078d4; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px;">↻ Rigioca</button>
+                <button id="sendScoreBtn" class="send-score-btn" style="background-color:#28a745; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px;">📤 Invia punteggio</button>
             </div>
+            <div style="margin-top:10px; font-size:12px; opacity:0.8;">Verrà inviato al bot per la classifica.</div>
         </div>
-        <script>
-        // Adatta il canvas mantenendo rapporto 400x600: scala via CSS per riempire lo schermo
-        function resizeGameCanvas() {
-            try {
-                const canvas = document.getElementById('gameCanvas');
-                if (!canvas) return;
-                const vw = window.innerWidth || document.documentElement.clientWidth;
-                const vh = window.innerHeight || document.documentElement.clientHeight;
-                const baseW = 400, baseH = 600;
-                const scale = Math.min(vw / baseW, vh / baseH);
-                // Risoluzione logica fissa per fisica/disegno
-                if (canvas.width !== baseW) canvas.width = baseW;
-                if (canvas.height !== baseH) canvas.height = baseH;
-                // Scala visualmente via CSS per contenere interamente il gioco
-                const cssW = Math.round(baseW * scale);
-                const cssH = Math.round(baseH * scale);
-                canvas.style.width = cssW + 'px';
-                canvas.style.height = cssH + 'px';
-                // Adatta overlay full-screen
-                const tutOverlay = document.getElementById('tutorialOverlay');
-                if (tutOverlay) tutOverlay.style.height = vh + 'px';
-                const diffOverlay = document.getElementById('difficultyOverlay');
-                if (diffOverlay) diffOverlay.style.height = vh + 'px';
-            } catch (_) {}
-        }
-        window.addEventListener('resize', resizeGameCanvas);
-        window.addEventListener('orientationchange', resizeGameCanvas);
-        document.addEventListener('DOMContentLoaded', function(){
-            // Alcuni WebView iOS aggiornano innerHeight dopo un tick
-            resizeGameCanvas();
-            setTimeout(resizeGameCanvas, 50);
-            setTimeout(resizeGameCanvas, 300);
-        });
-        // Mostra tutorial solo alla prima partita (usa localStorage)
+    </div>
+
+    <script>
+    // Adatta il canvas mantenendo rapporto 400x600: scala via CSS per riempire lo schermo
+    function resizeGameCanvas() {
+        try {
+            const canvas = document.getElementById('gameCanvas');
+            if (!canvas) return;
+            const vw = window.innerWidth || document.documentElement.clientWidth;
+            const vh = window.innerHeight || document.documentElement.clientHeight;
+            const baseW = 400, baseH = 600;
+            const scale = Math.min(vw / baseW, vh / baseH);
+            // Risoluzione logica fissa per fisica/disegno
+            if (canvas.width !== baseW) canvas.width = baseW;
+            if (canvas.height !== baseH) canvas.height = baseH;
+            // Scala visualmente via CSS per contenere interamente il gioco
+            const cssW = Math.round(baseW * scale);
+            const cssH = Math.round(baseH * scale);
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            // Adatta overlay full-screen
+            const tutOverlay = document.getElementById('tutorialOverlay');
+            if (tutOverlay) tutOverlay.style.height = vh + 'px';
+            const diffOverlay = document.getElementById('difficultyOverlay');
+            if (diffOverlay) diffOverlay.style.height = vh + 'px';
+        } catch (_) {}
+    }
+    window.addEventListener('resize', resizeGameCanvas);
+    window.addEventListener('orientationchange', resizeGameCanvas);
+    document.addEventListener('DOMContentLoaded', function(){
+        // Alcuni WebView iOS aggiornano innerHeight dopo un tick
+        resizeGameCanvas();
+        setTimeout(resizeGameCanvas, 50);
+        setTimeout(resizeGameCanvas, 300);
+    });
+        // Mostra tutorial solo alla prima partita (usa localStorage) - con guard per elementi mancanti
         window.addEventListener('DOMContentLoaded', function() {
-            if (!localStorage.getItem('chicoTutorialSeen')) {
-                document.getElementById('tutorialOverlay').style.display = 'block';
+            const tut = document.getElementById('tutorialOverlay');
+            const closeBtn = document.getElementById('closeTutorialBtn');
+            if (tut && !localStorage.getItem('chicoTutorialSeen')) {
+                tut.style.display = 'block';
             }
-            document.getElementById('closeTutorialBtn').onclick = function() {
-                document.getElementById('tutorialOverlay').style.display = 'none';
-                localStorage.setItem('chicoTutorialSeen','1');
-            };
+            if (tut && closeBtn) {
+                closeBtn.onclick = function() {
+                    tut.style.display = 'none';
+                    localStorage.setItem('chicoTutorialSeen','1');
+                };
+            }
         });
-        // Costanti di gioco
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+    // Costanti di gioco
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    // Bot Telegram per deep-link punteggio
+    const BOT_USERNAME = 'ChicoGiocaBot';
+    let lastFinalScore = 0;
+
+    // Overlay Game Over helpers (IDs: gameOverScreen, finalScoreText, sendScoreBtn)
+    function showGameOverScreen(finalScore) {
+        try {
+            lastFinalScore = finalScore;
+            const panel = document.getElementById('gameOverScreen');
+            const scoreEl = document.getElementById('finalScoreText');
+            const sendBtn = document.getElementById('sendScoreBtn');
+            if (scoreEl) scoreEl.textContent = 'Punteggio: ' + finalScore;
+            if (sendBtn) {
+                sendBtn.onclick = function () {
+                    const url = `https://t.me/${BOT_USERNAME}?start=score_${encodeURIComponent(lastFinalScore)}`;
+                    const w = window.open(url, '_blank');
+                    if (!w) window.location.href = url;
+                };
+            }
+            if (panel) panel.style.display = 'flex';
+        } catch (_) {}
+    }
+    function hideGameOverScreen() {
+        const panel = document.getElementById('gameOverScreen');
+        if (panel) panel.style.display = 'none';
+    }
     const GRAVITY_BASE = 0.33; // val base normal (ridotto)
         let gravity = GRAVITY_BASE;
     const FLAP = -5.2; // salto meno potente
@@ -1002,32 +1008,7 @@ function spawnCornMaybe() {
         lastCornSpawnScore = score;
     }
 }
-function drawCornItem(item) {
-    ctx.save();
-    const bob = Math.sin((Date.now()+ item.x*30)/500)*3;
-    ctx.translate(item.x, item.y + bob);
-    // pannocchia stilizzata
-    ctx.beginPath();
-    ctx.ellipse(0,0,CORN_RADIUS*0.55,CORN_RADIUS*0.9,0,0,Math.PI*2);
-    const grad = ctx.createLinearGradient(0,-CORN_RADIUS,0,CORN_RADIUS);
-    grad.addColorStop(0,'#fff59d');
-    grad.addColorStop(1,'#f1c40f');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = '#c49000';
-    ctx.lineWidth = 2;
-    ctx.fill();
-    ctx.stroke();
-    // grani (puntini)
-    ctx.fillStyle = 'rgba(255,165,0,0.55)';
-    for (let i=0;i<10;i++) {
-        ctx.beginPath();
-        ctx.arc((Math.random()-0.5)*CORN_RADIUS*0.6,(Math.random()-0.5)*CORN_RADIUS*1.2,1.2,0,Math.PI*2);
-        ctx.fill();
-    }
-    // foglie verdi
-    ctx.restore();
-}
-// (Versione semplificata pannocchia senza foglie dettagliate)
+// (Versione semplificata pannocchia)
 function drawCornItem(item) {
     ctx.save();
     const bob = Math.sin((Date.now()+ item.x*30)/500)*3;
@@ -1708,8 +1689,11 @@ function drawBottle(bottle) {
             if (!gameOver) {
                 requestAnimationFrame(gameLoop);
             } else {
-                // suono rimosso
+                // Mostra overlay e tenta anche shareScore nativo se disponibile
                 telegramShareScore(score);
+                showGameOverScreen(score);
+
+                // Disegno testuale opzionale sotto l’overlay
                 ctx.font = 'bold 36px Arial';
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
@@ -1789,6 +1773,20 @@ function drawBottle(bottle) {
     });
     document.getElementById('fireBtn').addEventListener('click', fire);
     document.getElementById('fireBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); fire(); }, { passive:false });
+    // Pulsanti overlay game over
+    const restartBtn = document.getElementById('restartBtn');
+    if (restartBtn) restartBtn.addEventListener('click', () => {
+        hideGameOverScreen();
+        // Usa la stessa routine di reset già presente in flap() quando gameOver=true
+        flap();
+    });
+    // Pulsante invio punteggio
+    const btnS = document.getElementById('sendScoreBtn');
+    if (btnS) btnS.addEventListener('click', () => {
+        hideGameOverScreen();
+        const url = `https://t.me/${BOT_USERNAME}?start=score_${encodeURIComponent(lastFinalScore)}`;
+        window.location.href = url;
+    });
     // Opzionale: tastiera per debug
     window.addEventListener('keydown', (e)=>{
         if (e.code === 'KeyF' || e.code === 'Space' || e.key === ' ' ) {
