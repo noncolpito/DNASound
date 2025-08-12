@@ -19,7 +19,7 @@
         }
         #gameCanvas {
             display: block;
-            margin: 40px auto 0 auto;
+            margin: 0 auto;
             background: #87ceeb;
             border: 4px solid #222;
             box-shadow: 0 0 20px #222;
@@ -253,21 +253,28 @@
             </div>
         </div>
         <script>
-        // Adatta canvas e overlay a iOS/Telegram in-app browser usando innerHeight
+        // Adatta il canvas mantenendo rapporto 400x600: scala via CSS per riempire lo schermo
         function resizeGameCanvas() {
             try {
                 const canvas = document.getElementById('gameCanvas');
                 if (!canvas) return;
-                const w = Math.min(window.innerWidth || document.documentElement.clientWidth, 480);
-                const h = window.innerHeight || document.documentElement.clientHeight;
-                // Mantieni risoluzione logica; se usi scaling CSS, puoi regolarla qui
-                canvas.width = w;
-                canvas.height = h;
+                const vw = window.innerWidth || document.documentElement.clientWidth;
+                const vh = window.innerHeight || document.documentElement.clientHeight;
+                const baseW = 400, baseH = 600;
+                const scale = Math.min(vw / baseW, vh / baseH);
+                // Risoluzione logica fissa per fisica/disegno
+                if (canvas.width !== baseW) canvas.width = baseW;
+                if (canvas.height !== baseH) canvas.height = baseH;
+                // Scala visualmente via CSS per contenere interamente il gioco
+                const cssW = Math.round(baseW * scale);
+                const cssH = Math.round(baseH * scale);
+                canvas.style.width = cssW + 'px';
+                canvas.style.height = cssH + 'px';
                 // Adatta overlay full-screen
                 const tutOverlay = document.getElementById('tutorialOverlay');
-                if (tutOverlay) tutOverlay.style.height = h + 'px';
+                if (tutOverlay) tutOverlay.style.height = vh + 'px';
                 const diffOverlay = document.getElementById('difficultyOverlay');
-                if (diffOverlay) diffOverlay.style.height = h + 'px';
+                if (diffOverlay) diffOverlay.style.height = vh + 'px';
             } catch (_) {}
         }
         window.addEventListener('resize', resizeGameCanvas);
