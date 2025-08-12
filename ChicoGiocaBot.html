@@ -210,11 +210,33 @@
     <button id="fireBtn" aria-label="Spara" title="Spara">🌽</button>
     <canvas id="gameCanvas" width="400" height="600"></canvas>
         <!-- Overlay tutorial -->
-        <div id="tutorialOverlay" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.72); color:#fff; font-size:1.25em; text-align:center;">
-            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,30,30,0.92); border-radius:22px; padding:36px 28px 32px 28px; max-width:340px; box-shadow:0 8px 32px #000;">
+            <div id="tutorialOverlay" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.72); color:#fff; font-size:1.25em; text-align:center;">
+                <div id="tutorialBox" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,30,30,0.92); border-radius:22px; padding:36px 28px 32px 28px; max-width:340px; width:90vw; box-shadow:0 8px 32px #000;">
+        <style>
+        @media (max-width: 600px) {
+            #tutorialBox {
+                max-width: 98vw !important;
+                width: 98vw !important;
+                padding: 22px 6vw 22px 6vw !important;
+                font-size: 1.08em !important;
+            }
+            #tutorialBox h2 {
+                font-size: 1.25em !important;
+            }
+            #tutorialBox ul {
+                font-size: 1em !important;
+            }
+            #closeTutorialBtn {
+                font-size: 1em !important;
+                padding: 10px 0 !important;
+                width: 100%;
+                min-width: 0;
+            }
+        }
+        </style>
                 <h2 style="margin-top:0; font-size:1.6em;">Come si gioca</h2>
                 <ul style="text-align:left; margin:0 0 18px 0; padding:0 0 0 18px; font-size:1em;">
-                    <li><b>Tocca</b> o per volare 🕊️</li>
+                    <li><b>Tocca</b> per volare 🕊️</li>
                     <li>Raccogli <b>bottiglie di rum</b> <span style="font-size:1.2em;">🍾</span> per fare punti</li>
                     <li>Evita <b>barili</b> e <b>gabbiani</b> <span style="font-size:1.2em;">🪵🐦</span></li>
                     <li>Premi <b>🌽</b> per sparare ai gabbiani/barili volanti</li>
