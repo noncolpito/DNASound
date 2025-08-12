@@ -222,7 +222,7 @@
             <p id="finalScoreText" style="margin:0 0 16px; font-size:18px;">Punteggio: 0</p>
             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
                 <button id="restartBtn" style="background-color:#0078d4; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px;">↻ Rigioca</button>
-                <button id="sendScoreBtn" class="send-score-btn" style="background-color:#28a745; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px;">📤 Invia punteggio</button>
+                <a id="sendScoreBtn" class="send-score-btn" href="#" target="_top" rel="noopener" style="background-color:#28a745; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px; text-decoration:none; display:inline-block; text-align:center;">📤 Invia punteggio</a>
             </div>
             <div style="margin-top:10px; font-size:12px; opacity:0.8;">Verrà inviato al bot per la classifica.</div>
         </div>
@@ -282,6 +282,16 @@
     const BOT_USERNAME = 'ChicoGiocaBot';
     let lastFinalScore = 0;
 
+    // Costruisce deep-link al bot con punteggio (tg:// preferito, https fallback)
+    function buildScoreLinks(score) {
+        const s = encodeURIComponent(score);
+        const bot = BOT_USERNAME;
+        return {
+            tg: `tg://resolve?domain=${bot}&start=score_${s}`,
+            https: `https://t.me/${bot}?start=score_${s}`
+        };
+    }
+
     // Overlay Game Over helpers (IDs: gameOverScreen, finalScoreText, sendScoreBtn)
     function showGameOverScreen(finalScore) {
         try {
@@ -291,11 +301,9 @@
             const sendBtn = document.getElementById('sendScoreBtn');
             if (scoreEl) scoreEl.textContent = 'Punteggio: ' + finalScore;
             if (sendBtn) {
-                sendBtn.onclick = function () {
-                    const url = `https://t.me/${BOT_USERNAME}?start=score_${encodeURIComponent(lastFinalScore)}`;
-                    const w = window.open(url, '_blank');
-                    if (!w) window.location.href = url;
-                };
+                const links = buildScoreLinks(finalScore);
+                sendBtn.setAttribute('href', links.tg);
+                sendBtn.setAttribute('data-fallback', links.https);
             }
             if (panel) panel.style.display = 'flex';
         } catch (_) {}
@@ -1780,12 +1788,11 @@ function drawBottle(bottle) {
         // Usa la stessa routine di reset già presente in flap() quando gameOver=true
         flap();
     });
-    // Pulsante invio punteggio
+    // Pulsante invio punteggio: lasciare la navigazione all'anchor
     const btnS = document.getElementById('sendScoreBtn');
     if (btnS) btnS.addEventListener('click', () => {
         hideGameOverScreen();
-        const url = `https://t.me/${BOT_USERNAME}?start=score_${encodeURIComponent(lastFinalScore)}`;
-        window.location.href = url;
+        // Navigazione gestita dall'href; in alcuni WebView iOS tg:// funziona meglio
     });
     // Opzionale: tastiera per debug
     window.addEventListener('keydown', (e)=>{
