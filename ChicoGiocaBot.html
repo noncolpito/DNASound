@@ -1279,152 +1279,114 @@ function drawShieldItem(item) {
     const bob = Math.sin((t + item.x * 40) / 600) * 4;
     ctx.translate(item.x, item.y + bob);
 
-    // Soft ambient aura
-    const aura = ctx.createRadialGradient(0,0,6,0,0,SHIELD_RADIUS+18);
-    aura.addColorStop(0,'rgba(120,200,255,0.45)');
-    aura.addColorStop(0.5,'rgba(90,170,255,0.22)');
-    aura.addColorStop(1,'rgba(90,170,255,0)');
+    const R = SHIELD_RADIUS;
+
+    // Alone soffuso blu
+    const aura = ctx.createRadialGradient(0, 0, 6, 0, 0, R + 20);
+    aura.addColorStop(0, 'rgba(120,200,255,0.5)');
+    aura.addColorStop(0.6, 'rgba(90,170,255,0.25)');
+    aura.addColorStop(1, 'rgba(90,170,255,0)');
     ctx.beginPath();
-    ctx.arc(0,0,SHIELD_RADIUS+18,0,Math.PI*2);
+    ctx.arc(0, 0, R + 20, 0, Math.PI * 2);
     ctx.fillStyle = aura;
     ctx.fill();
 
-    // Outer metallic ring
-    ctx.beginPath();
-    ctx.arc(0,0,SHIELD_RADIUS+4,0,Math.PI*2);
-    const ringGrad = ctx.createLinearGradient(-SHIELD_RADIUS-4,-SHIELD_RADIUS-4,SHIELD_RADIUS+4,SHIELD_RADIUS+4);
-    ringGrad.addColorStop(0,'#e6f6ff');
-    ringGrad.addColorStop(0.35,'#7fc2e6');
-    ringGrad.addColorStop(0.6,'#3e7ba8');
-    ringGrad.addColorStop(1,'#a2dfff');
-    ctx.fillStyle = ringGrad;
-    ctx.shadowColor = 'rgba(120,200,255,0.9)';
+    // Forma scudo (stile "heater")
+    function pathShield(inset = 0) {
+        const top = -R * 1.08 + inset;
+        const leftX = -R * 0.78 + inset * 0.6;
+        const rightX = R * 0.78 - inset * 0.6;
+        const midY = R * 0.15 - inset * 0.3;
+        const tipY = R * 1.25 - inset;
+        ctx.beginPath();
+        ctx.moveTo(0, top);
+        ctx.quadraticCurveTo(leftX, top + R * 0.45, leftX, midY);
+        ctx.quadraticCurveTo(-R * 0.35, R * 0.8, 0, tipY);
+        ctx.quadraticCurveTo(R * 0.35, R * 0.8, rightX, midY);
+        ctx.quadraticCurveTo(rightX, top + R * 0.45, 0, top);
+        ctx.closePath();
+    }
+
+    // Corpo blu con bordo metallico
+    pathShield(0);
+    const bodyGrad = ctx.createLinearGradient(0, -R * 1.1, 0, R * 1.25);
+    bodyGrad.addColorStop(0, '#3bb4ff');
+    bodyGrad.addColorStop(0.55, '#0d6bd1');
+    bodyGrad.addColorStop(1, '#073a7a');
+    ctx.fillStyle = bodyGrad;
+    ctx.shadowColor = 'rgba(30,120,255,0.45)';
     ctx.shadowBlur = 10;
     ctx.fill();
-
-    // Inner shield body (slightly inset)
-    ctx.beginPath();
-    ctx.arc(0,0,SHIELD_RADIUS-2,0,Math.PI*2);
-    const coreGrad = ctx.createRadialGradient(-6,-6,4,0,0,SHIELD_RADIUS-2);
-    coreGrad.addColorStop(0,'#c7ecff');
-    coreGrad.addColorStop(0.35,'#62b8ff');
-    coreGrad.addColorStop(0.75,'#0e5d94');
-    coreGrad.addColorStop(1,'#083a5c');
-    ctx.fillStyle = coreGrad;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#d9edff';
     ctx.stroke();
 
-    // Rotating light sweep (subtle)
-    const sweepA = (t/900)% (Math.PI*2);
+    // Bordo interno leggero
+    pathShield(3);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Riflesso morbido
     ctx.save();
-    ctx.rotate(sweepA);
     ctx.beginPath();
-    ctx.ellipse(0,0,SHIELD_RADIUS-4, (SHIELD_RADIUS-4)*0.55, 0, -0.4, 0.4);
-    const sweepGrad = ctx.createLinearGradient(-SHIELD_RADIUS,0,SHIELD_RADIUS,0);
-    sweepGrad.addColorStop(0,'rgba(255,255,255,0)');
-    sweepGrad.addColorStop(0.45,'rgba(255,255,255,0.0)');
-    sweepGrad.addColorStop(0.5,'rgba(255,255,255,0.35)');
-    sweepGrad.addColorStop(0.55,'rgba(255,255,255,0.0)');
-    sweepGrad.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle = sweepGrad;
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fill();
+    pathShield(0);
+    ctx.clip();
+    const glare = ctx.createRadialGradient(-R * 0.3, -R * 0.7, 2, -R * 0.3, -R * 0.7, R * 1.2);
+    glare.addColorStop(0, 'rgba(255,255,255,0.35)');
+    glare.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glare;
+    ctx.fillRect(-R * 2, -R * 2, R * 4, R * 4);
     ctx.restore();
 
-    // Tridente stile Poseidone
+    // Tridente giallo al centro
     ctx.save();
-    const triScale = 0.86;
-    ctx.scale(triScale, triScale);
-    ctx.lineJoin='round';
-    ctx.lineCap='round';
-    // Glow acqua esterno
-    const poseGlow = ctx.createRadialGradient(0,-4,3,0,0,SHIELD_RADIUS);
-    poseGlow.addColorStop(0,'rgba(160,235,255,0.85)');
-    poseGlow.addColorStop(0.35,'rgba(120,210,255,0.35)');
-    poseGlow.addColorStop(1,'rgba(120,210,255,0)');
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ffd24a';
+    ctx.fillStyle = '#ffd24a';
+    ctx.shadowColor = 'rgba(255,210,80,0.55)';
+    ctx.shadowBlur = 8;
+    const lw = Math.max(2, R * 0.28);
+    ctx.lineWidth = lw;
+
+    // Asta centrale
     ctx.beginPath();
-    ctx.arc(0,0,SHIELD_RADIUS-3,0,Math.PI*2);
-    ctx.fillStyle = poseGlow;
-    ctx.globalAlpha = 0.55;
+    ctx.moveTo(0, R * 0.9);
+    ctx.lineTo(0, -R * 0.35);
+    ctx.stroke();
+
+    // Punta centrale (triangolo)
+    ctx.beginPath();
+    ctx.moveTo(0, -R * 1.0);
+    ctx.lineTo(-R * 0.18, -R * 0.55);
+    ctx.lineTo(R * 0.18, -R * 0.55);
+    ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 1;
-    // Silhouette base (più spessa, scura blu)
+
+    // Bracci laterali
     ctx.beginPath();
-    // Asta centrale e punta
-    ctx.moveTo(0,12);
-    ctx.lineTo(0,-10);
-    ctx.lineTo(-3,-10);
-    ctx.lineTo(0,-24); // punta superiore
-    ctx.lineTo(3,-10);
-    ctx.lineTo(0,-10);
-    // Prong sinistro curvo
-    ctx.moveTo(0,-12);
-    ctx.lineTo(-9,-4);
-    ctx.quadraticCurveTo(-12,-2,-12,0);
-    ctx.lineTo(-12,-8);
-    ctx.quadraticCurveTo(-12,-14,-8,-18);
-    ctx.lineTo(-6,-14);
-    ctx.quadraticCurveTo(-8,-10,-6,-8);
-    ctx.lineTo(0,-14);
-    // Prong destro curvo
-    ctx.moveTo(0,-12);
-    ctx.lineTo(9,-4);
-    ctx.quadraticCurveTo(12,-2,12,0);
-    ctx.lineTo(12,-8);
-    ctx.quadraticCurveTo(12,-14,8,-18);
-    ctx.lineTo(6,-14);
-    ctx.quadraticCurveTo(8,-10,6,-8);
-    ctx.lineTo(0,-14);
-    // Barra decorativa / guardia
-    ctx.moveTo(-8,2);
-    ctx.lineTo(8,2);
-    // Anello piccolo
-    ctx.moveTo(0,2);
-    ctx.arc(0,2,2,0,Math.PI*2);
-    ctx.strokeStyle = '#012c44';
-    ctx.lineWidth = 7.4;
+    ctx.moveTo(0, -R * 0.5);
+    ctx.lineTo(-R * 0.42, -R * 0.15);
+    ctx.moveTo(0, -R * 0.5);
+    ctx.lineTo(R * 0.42, -R * 0.15);
     ctx.stroke();
-    // Riempimento dorato
-    const gold = ctx.createLinearGradient(0,-24,0,12);
-    gold.addColorStop(0,'#fff6c9');
-    gold.addColorStop(0.28,'#ffe178');
-    gold.addColorStop(0.55,'#ffc53a');
-    gold.addColorStop(0.75,'#e6a300');
-    gold.addColorStop(1,'#b87400');
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.fillStyle = gold;
-    ctx.fillRect(-20,-28,40,46);
-    ctx.globalCompositeOperation = 'source-over';
-    // Bordo chiaro interno
+
+    // Punte laterali (triangolini)
     ctx.beginPath();
-    ctx.moveTo(0,12); ctx.lineTo(0,-10); ctx.lineTo(-2,-10); ctx.lineTo(0,-20); ctx.lineTo(2,-10); ctx.lineTo(0,-10);
-    ctx.moveTo(0,-12); ctx.lineTo(-8,-4); ctx.quadraticCurveTo(-10,-2,-10,-0.5); ctx.quadraticCurveTo(-10,-10,-6,-16);
-    ctx.moveTo(0,-12); ctx.lineTo(8,-4); ctx.quadraticCurveTo(10,-2,10,-0.5); ctx.quadraticCurveTo(10,-10,6,-16);
-    ctx.moveTo(-7,2); ctx.lineTo(7,2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-    // Highlight pulsante centrale
-    const pulse = 0.5 + Math.sin(t/350)*0.5;
-    ctx.beginPath();
-    ctx.arc(0,2,2.4+pulse*0.6,0,Math.PI*2);
-    const ring = ctx.createRadialGradient(0,2,0.5,0,2,3.2);
-    ring.addColorStop(0,'rgba(255,255,255,0.95)');
-    ring.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle = ring;
+    // sinistra
+    ctx.moveTo(-R * 0.42, -R * 0.15);
+    ctx.lineTo(-R * 0.58, -R * 0.45);
+    ctx.lineTo(-R * 0.28, -R * 0.35);
+    ctx.closePath();
+    // destra
+    ctx.moveTo(R * 0.42, -R * 0.15);
+    ctx.lineTo(R * 0.58, -R * 0.45);
+    ctx.lineTo(R * 0.28, -R * 0.35);
+    ctx.closePath();
     ctx.fill();
     ctx.restore();
-
-    // Small specular spot
-    ctx.beginPath();
-    ctx.arc(-6,-8,5,0,Math.PI*2);
-    const spot = ctx.createRadialGradient(-7,-9,1,-6,-8,5);
-    spot.addColorStop(0,'rgba(255,255,255,0.95)');
-    spot.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.fillStyle = spot;
-    ctx.fill();
 
     ctx.restore();
 }
