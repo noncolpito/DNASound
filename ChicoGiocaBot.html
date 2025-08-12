@@ -209,7 +209,32 @@
     <button id="muteBtn" aria-label="Toggle audio" title="Audio">🔊</button>
     <button id="fireBtn" aria-label="Spara" title="Spara">🌽</button>
     <canvas id="gameCanvas" width="400" height="600"></canvas>
-    <script>
+        <!-- Overlay tutorial -->
+        <div id="tutorialOverlay" style="display:none; position:fixed; z-index:1000; left:0; top:0; width:100vw; height:100vh; background:rgba(0,0,0,0.72); color:#fff; font-size:1.25em; text-align:center;">
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(30,30,30,0.92); border-radius:22px; padding:36px 28px 32px 28px; max-width:340px; box-shadow:0 8px 32px #000;">
+                <h2 style="margin-top:0; font-size:1.6em;">Come si gioca</h2>
+                <ul style="text-align:left; margin:0 0 18px 0; padding:0 0 0 18px; font-size:1em;">
+                    <li><b>Tocca</b> o per volare 🕊️</li>
+                    <li>Raccogli <b>bottiglie di rum</b> <span style="font-size:1.2em;">🍾</span> per fare punti</li>
+                    <li>Evita <b>barili</b> e <b>gabbiani</b> <span style="font-size:1.2em;">🪵🐦</span></li>
+                    <li>Premi <b>🌽</b> per sparare ai gabbiani/barili volanti</li>
+                    <li>Raccogli <b>mais</b> <span style="font-size:1.2em;">🌽</span> per ricaricare i colpi</li>
+                    <li>Prendi lo <b>scudo</b> <span style="font-size:1.2em;">🛡️</span> per proteggerti da un colpo</li>
+                </ul>
+                <button id="closeTutorialBtn" style="margin-top:10px; font-size:1.1em; padding:8px 28px; border-radius:12px; border:none; background:#ffd700; color:#222; font-weight:bold; cursor:pointer; box-shadow:0 2px 8px #0006;">OK, inizia!</button>
+            </div>
+        </div>
+        <script>
+        // Mostra tutorial solo alla prima partita (usa localStorage)
+        window.addEventListener('DOMContentLoaded', function() {
+            if (!localStorage.getItem('chicoTutorialSeen')) {
+                document.getElementById('tutorialOverlay').style.display = 'block';
+            }
+            document.getElementById('closeTutorialBtn').onclick = function() {
+                document.getElementById('tutorialOverlay').style.display = 'none';
+                localStorage.setItem('chicoTutorialSeen','1');
+            };
+        });
         // Costanti di gioco
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
