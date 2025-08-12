@@ -222,9 +222,22 @@
             <p id="finalScoreText" style="margin:0 0 16px; font-size:18px;">Punteggio: 0</p>
             <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
                 <button id="restartBtn" style="background-color:#0078d4; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px;">↻ Rigioca</button>
-                <a id="sendScoreBtn" class="send-score-btn" href="#" target="_top" rel="noopener" style="background-color:#28a745; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px; text-decoration:none; display:inline-block; text-align:center;">📤 Invia punteggio</a>
+                <!-- cambia in link https con target _blank e niente JS sul click -->
+                <a id="sendScoreBtn"
+                   class="send-score-btn"
+                   href="#"
+                   target="_blank"
+                   rel="noopener"
+                   style="background-color:#28a745; color:#fff; border:none; padding:12px 16px; font-size:16px; border-radius:10px; cursor:pointer; flex:1 1 140px; text-decoration:none; display:inline-block; text-align:center;">
+                   📤 Invia punteggio
+                </a>
             </div>
-            <div style="margin-top:10px; font-size:12px; opacity:0.8;">Verrà inviato al bot per la classifica.</div>
+            <!-- fallback visibile -->
+            <div style="margin-top:8px;">
+                <a id="scoreFallbackLink" href="#" target="_blank" rel="noopener" style="color:#9ad1ff; text-decoration:underline; font-size:12px;">
+                    Se non si apre, tocca qui
+                </a>
+            </div>
         </div>
     </div>
 
@@ -282,29 +295,27 @@
     const BOT_USERNAME = 'ChicoGiocaBot';
     let lastFinalScore = 0;
 
-    // Costruisce deep-link al bot con punteggio (tg:// preferito, https fallback)
+    // Costruisce deep-link (usa https per massima compatibilità nel WebView)
     function buildScoreLinks(score) {
         const s = encodeURIComponent(score);
         const bot = BOT_USERNAME;
         return {
-            tg: `tg://resolve?domain=${bot}&start=score_${s}`,
             https: `https://t.me/${bot}?start=score_${s}`
         };
     }
 
-    // Overlay Game Over helpers (IDs: gameOverScreen, finalScoreText, sendScoreBtn)
+    // Overlay Game Over: imposta gli href (niente listener che intercettano il click)
     function showGameOverScreen(finalScore) {
         try {
             lastFinalScore = finalScore;
             const panel = document.getElementById('gameOverScreen');
             const scoreEl = document.getElementById('finalScoreText');
             const sendBtn = document.getElementById('sendScoreBtn');
+            const fbLink = document.getElementById('scoreFallbackLink');
             if (scoreEl) scoreEl.textContent = 'Punteggio: ' + finalScore;
-            if (sendBtn) {
-                const links = buildScoreLinks(finalScore);
-                sendBtn.setAttribute('href', links.tg);
-                sendBtn.setAttribute('data-fallback', links.https);
-            }
+            const link = buildScoreLinks(finalScore).https;
+            if (sendBtn) sendBtn.setAttribute('href', link);
+            if (fbLink) fbLink.setAttribute('href', link);
             if (panel) panel.style.display = 'flex';
         } catch (_) {}
     }
@@ -891,7 +902,6 @@ function drawFlyingObstacle(obs) {
 
         ctx.restore(); // fine ramo gabbiano
     } // close else branch
-    ctx.restore(); // restore outer save
 }
 // ====== Proiettili (chicchi di mais) ======
 function fire() {
