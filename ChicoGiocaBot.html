@@ -313,22 +313,9 @@
             const sendBtn = document.getElementById('sendScoreBtn');
             const fbLink = document.getElementById('scoreFallbackLink');
             if (scoreEl) scoreEl.textContent = 'Punteggio: ' + finalScore;
-            const native = (window.TelegramGameProxy && typeof TelegramGameProxy.shareScore === 'function');
-            if (native) {
-                // Se aperto come Game, nascondi il bottone di invio per evitare doppio salvataggio
-                if (sendBtn) sendBtn.style.display = 'none';
-                if (fbLink) fbLink.style.display = 'none';
-            } else {
-                const link = buildScoreLinks(finalScore).https;
-                if (sendBtn) {
-                    sendBtn.style.display = '';
-                    sendBtn.setAttribute('href', link);
-                }
-                if (fbLink) {
-                    fbLink.style.display = '';
-                    fbLink.setAttribute('href', link);
-                }
-            }
+            const link = buildScoreLinks(finalScore).https;
+            if (sendBtn) sendBtn.setAttribute('href', link);
+            if (fbLink) fbLink.setAttribute('href', link);
             if (panel) panel.style.display = 'flex';
         } catch (_) {}
     }
