@@ -1067,56 +1067,41 @@ function drawCornItem(item) {
     ctx.restore();
 }
 
+// Ottimizzazione: frame skipping e meno ombre/gradienti su Chico
+let chicoFrameSkip = 0;
+let chicoWingAngle = 0;
 function drawChico(y) {
+    chicoFrameSkip = (chicoFrameSkip+1)%2;
     ctx.save();
     const x = 80;
-
-    // Aura scudo / flash consumo
+    // Aura scudo / flash consumo (ombre ridotte)
     if (hasShield) {
         ctx.save();
         const pulse = 0.6 + Math.sin(Date.now()/180) * 0.25;
-        const gradA = ctx.createRadialGradient(x, y, CHICO_RADIUS * 0.4, x, y, CHICO_RADIUS + 18);
-        gradA.addColorStop(0, 'rgba(120,200,255,0.0)');
-        gradA.addColorStop(0.55, 'rgba(120,200,255,0.20)');
-        gradA.addColorStop(1, 'rgba(120,200,255,0.0)');
         ctx.beginPath();
         ctx.arc(x, y, CHICO_RADIUS + 14 + pulse * 4, 0, Math.PI * 2);
-        ctx.fillStyle = gradA;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(x, y, CHICO_RADIUS + 10 + pulse * 3, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(160,230,255,0.85)';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = 'rgba(120,200,255,0.9)';
-        ctx.shadowBlur = 12;
+        ctx.strokeStyle = 'rgba(160,230,255,0.5)';
+        ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
     } else if (Date.now() < shieldBreakingEnd) {
-        const remain = (shieldBreakingEnd - Date.now()) / SHIELD_BREAK_DURATION; // 1->0
-        const rings = 3;
+        const remain = (shieldBreakingEnd - Date.now()) / SHIELD_BREAK_DURATION;
+        const rings = 2;
         for (let i=0;i<rings;i++) {
             const ratio = i / rings;
-            const alpha = Math.max(0,(remain - ratio*0.25))*0.9;
+            const alpha = Math.max(0,(remain - ratio*0.25))*0.6;
             if (alpha <= 0) continue;
             ctx.save();
-            const r = CHICO_RADIUS + 12 + ratio*36 + Math.sin(Date.now()/90 + i)*2;
+            const r = CHICO_RADIUS + 12 + ratio*28 + Math.sin(Date.now()/90 + i)*2;
             ctx.globalAlpha = alpha;
             ctx.beginPath();
             ctx.arc(x, y, r, 0, Math.PI*2);
-            ctx.strokeStyle = 'rgba(150,220,255,0.85)';
-            ctx.lineWidth = 2 + (1-remain)*2;
-            ctx.shadowColor = 'rgba(120,200,255,0.6)';
-            ctx.shadowBlur = 8;
+            ctx.strokeStyle = 'rgba(150,220,255,0.5)';
+            ctx.lineWidth = 1.5 + (1-remain)*1.5;
             ctx.stroke();
             ctx.restore();
         }
     }
-
-    // Ombra dolce
-    ctx.shadowColor = 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetY = 3;
-
     // Corpo (rosso) con gradiente e contorno
     const bodyGrad = ctx.createRadialGradient(x - 6, y - 8, CHICO_RADIUS * 0.2, x, y, CHICO_RADIUS);
     bodyGrad.addColorStop(0, '#ff3b30');
@@ -1125,12 +1110,10 @@ function drawChico(y) {
     ctx.arc(x, y, CHICO_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = bodyGrad;
     ctx.fill();
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.2;
     ctx.strokeStyle = '#7a0000';
     ctx.stroke();
-
-    // Pancia (giallo-oro) con gradiente e highlight
-    ctx.shadowBlur = 0;
+    // Pancia (giallo-oro) con gradiente
     const bellyGrad = ctx.createRadialGradient(x, y + 10, CHICO_RADIUS * 0.2, x, y + 10, CHICO_RADIUS * 0.7);
     bellyGrad.addColorStop(0, '#ffe680');
     bellyGrad.addColorStop(1, '#d4b200');
@@ -1138,12 +1121,6 @@ function drawChico(y) {
     ctx.arc(x, y + 10, CHICO_RADIUS * 0.7, 0, Math.PI * 2);
     ctx.fillStyle = bellyGrad;
     ctx.fill();
-    // Piccolo riflesso pancia
-    ctx.beginPath();
-    ctx.arc(x - 8, y + 2, 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fill();
-
     // Coda a piume (rosso, giallo, blu)
     ctx.save();
     ctx.translate(x, y + CHICO_RADIUS - 2);
@@ -1160,9 +1137,8 @@ function drawChico(y) {
     }
     ctx.globalAlpha = 1;
     ctx.restore();
-
     // Piume decorative rosse
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(Math.PI / 7 * i);
@@ -1170,17 +1146,18 @@ function drawChico(y) {
         ctx.moveTo(-CHICO_RADIUS + 6, -6);
         ctx.quadraticCurveTo(-CHICO_RADIUS - 6, -10, -CHICO_RADIUS + 1, -1);
         ctx.strokeStyle = '#ff5a5f';
-        ctx.lineWidth = 1.6;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.restore();
     }
-
-    // Ali animate con gradiente
-    let wingAngle = Math.sin(Date.now() / 120) * 0.5 + (chicoVY < 0 ? -0.7 : 0);
-    for (let i = 0; i < 3; i++) {
+    // Ali animate con gradiente (frame skipping)
+    if (chicoFrameSkip===0) {
+        chicoWingAngle = Math.sin(Date.now() / 120) * 0.5 + (chicoVY < 0 ? -0.7 : 0);
+    }
+    for (let i = 0; i < 2; i++) {
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(wingAngle + i * 0.1);
+        ctx.rotate(chicoWingAngle + i * 0.1);
         const cx = -18, cy = i * 2, rx = 18 - i * 2, ry = 8;
         const wingGrad = ctx.createRadialGradient(cx - 6, cy - 4, 2, cx, cy, rx);
         wingGrad.addColorStop(0, '#ff6666');
@@ -1196,32 +1173,22 @@ function drawChico(y) {
         ctx.stroke();
         ctx.restore();
     }
-
-    // Becco con shading
+    // Becco
     ctx.save();
-    // Parte superiore
-    const upperBeakGrad = ctx.createLinearGradient(x + CHICO_RADIUS, y - 8, x + CHICO_RADIUS + 18, y);
-    upperBeakGrad.addColorStop(0, '#ffb347');
-    upperBeakGrad.addColorStop(1, '#ff8c00');
     ctx.beginPath();
     ctx.moveTo(x + CHICO_RADIUS, y - 6);
     ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y - 10, x + CHICO_RADIUS + 18, y - 2);
     ctx.lineTo(x + CHICO_RADIUS + 1, y - 2);
     ctx.closePath();
-    ctx.fillStyle = upperBeakGrad;
+    ctx.fillStyle = '#ffb347';
     ctx.fill();
-    // Parte inferiore
-    const lowerBeakGrad = ctx.createLinearGradient(x + CHICO_RADIUS, y, x + CHICO_RADIUS + 16, y + 6);
-    lowerBeakGrad.addColorStop(0, '#ff9e2c');
-    lowerBeakGrad.addColorStop(1, '#e67600');
     ctx.beginPath();
     ctx.moveTo(x + CHICO_RADIUS, y - 2);
     ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y + 5, x + CHICO_RADIUS + 16, y + 2);
     ctx.lineTo(x + CHICO_RADIUS, y + 4);
     ctx.closePath();
-    ctx.fillStyle = lowerBeakGrad;
+    ctx.fillStyle = '#ff9e2c';
     ctx.fill();
-    // Linea bocca
     ctx.beginPath();
     ctx.moveTo(x + CHICO_RADIUS + 2, y);
     ctx.quadraticCurveTo(x + CHICO_RADIUS + 8, y + 2, x + CHICO_RADIUS + 14, y + 1);
@@ -1229,19 +1196,14 @@ function drawChico(y) {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
-
-    // Orecchino d'oro con highlight
-    const ringGrad = ctx.createRadialGradient(x + 3, y + CHICO_RADIUS / 2 - 1, 0.5, x + 4, y + CHICO_RADIUS / 2, 4);
-    ringGrad.addColorStop(0, '#fff2a8');
-    ringGrad.addColorStop(1, '#d4a700');
+    // Orecchino d'oro
     ctx.beginPath();
     ctx.arc(x + 4, y + CHICO_RADIUS / 2, 4, 0, Math.PI * 2);
-    ctx.fillStyle = ringGrad;
+    ctx.fillStyle = '#ffd700';
     ctx.fill();
     ctx.strokeStyle = '#9b7500';
     ctx.lineWidth = 1;
     ctx.stroke();
-
     // Occhio con bordo e riflessi
     ctx.beginPath();
     ctx.arc(x + 14, y - 8, 6, 0, Math.PI * 2);
@@ -1250,12 +1212,10 @@ function drawChico(y) {
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    // Pupilla
     ctx.beginPath();
     ctx.arc(x + 16, y - 8, 2.2, 0, Math.PI * 2);
     ctx.fillStyle = 'black';
     ctx.fill();
-    // Riflessi
     ctx.beginPath();
     ctx.arc(x + 12, y - 10, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
@@ -1264,28 +1224,22 @@ function drawChico(y) {
     ctx.arc(x + 17.5, y - 6.5, 0.8, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.fill();
-
     // Benda da pirata
     ctx.save();
     ctx.strokeStyle = '#222';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(x + 14, y - 8, 6, Math.PI * 0.2, Math.PI * 0.8);
     ctx.stroke();
-    // Nodo della benda
     ctx.beginPath();
     ctx.moveTo(x + 20, y - 13);
     ctx.quadraticCurveTo(x + 25, y - 10, x + 22, y - 5);
     ctx.strokeStyle = '#222';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
-
-    // Cappello da pirata con gradiente e bordo dorato
+    // Cappello da pirata (ombre ridotte)
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 2;
     const hatGrad = ctx.createLinearGradient(x + 2, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 8);
     hatGrad.addColorStop(0, '#111');
     hatGrad.addColorStop(1, '#2a2a2a');
@@ -1296,22 +1250,18 @@ function drawChico(y) {
     ctx.closePath();
     ctx.fillStyle = hatGrad;
     ctx.fill();
-    // Bordo dorato
     ctx.beginPath();
     ctx.moveTo(x + 2, y - CHICO_RADIUS - 2);
     ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
     ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Highlight cappello
     ctx.beginPath();
     ctx.moveTo(x + 8, y - CHICO_RADIUS - 8);
     ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 14, x + 28, y - CHICO_RADIUS - 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-    // Teschio sul cappello
-    ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.arc(x + 18, y - CHICO_RADIUS - 8, 5, 0, Math.PI * 2);
     ctx.fillStyle = 'white';
@@ -1328,7 +1278,6 @@ function drawChico(y) {
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
-
     ctx.restore();
 }
 
