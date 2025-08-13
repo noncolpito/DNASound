@@ -1051,19 +1051,11 @@ function spawnCornMaybe() {
 }
 // (Versione semplificata pannocchia)
 function drawCornItem(item) {
-    ctx.save();
+    if (!cornCanvas) prerenderCorn();
     const bob = Math.sin((Date.now()+ item.x*30)/500)*3;
+    ctx.save();
     ctx.translate(item.x, item.y + bob);
-    ctx.beginPath();
-    ctx.ellipse(0,0,CORN_RADIUS*0.55,CORN_RADIUS*0.9,0,0,Math.PI*2);
-    const grad = ctx.createLinearGradient(0,-CORN_RADIUS,0,CORN_RADIUS);
-    grad.addColorStop(0,'#fff59d');
-    grad.addColorStop(1,'#f1c40f');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = '#c49000';
-    ctx.lineWidth = 2;
-    ctx.fill();
-    ctx.stroke();
+    ctx.drawImage(cornCanvas, -cornCanvas.width/2, -cornCanvas.height/2);
     ctx.restore();
 }
 
@@ -1283,120 +1275,12 @@ function drawChico(y) {
 
 // --- Power-up Scudo (tridente) ---
 function drawShieldItem(item) {
-    ctx.save();
+    if (!shieldCanvas) prerenderShield();
     const t = Date.now();
     const bob = Math.sin((t + item.x * 40) / 600) * 4;
+    ctx.save();
     ctx.translate(item.x, item.y + bob);
-
-    const R = SHIELD_RADIUS;
-
-    // Alone soffuso blu
-    const aura = ctx.createRadialGradient(0, 0, 6, 0, 0, R + 20);
-    aura.addColorStop(0, 'rgba(120,200,255,0.5)');
-    aura.addColorStop(0.6, 'rgba(90,170,255,0.25)');
-    aura.addColorStop(1, 'rgba(90,170,255,0)');
-    ctx.beginPath();
-    ctx.arc(0, 0, R + 20, 0, Math.PI * 2);
-    ctx.fillStyle = aura;
-    ctx.fill();
-
-    // Forma scudo (stile "heater")
-    function pathShield(inset = 0) {
-        const top = -R * 1.08 + inset;
-        const leftX = -R * 0.78 + inset * 0.6;
-        const rightX = R * 0.78 - inset * 0.6;
-        const midY = R * 0.15 - inset * 0.3;
-        const tipY = R * 1.25 - inset;
-        ctx.beginPath();
-        ctx.moveTo(0, top);
-        ctx.quadraticCurveTo(leftX, top + R * 0.45, leftX, midY);
-        ctx.quadraticCurveTo(-R * 0.35, R * 0.8, 0, tipY);
-        ctx.quadraticCurveTo(R * 0.35, R * 0.8, rightX, midY);
-        ctx.quadraticCurveTo(rightX, top + R * 0.45, 0, top);
-        ctx.closePath();
-    }
-
-    // Corpo blu con bordo metallico
-    pathShield(0);
-    const bodyGrad = ctx.createLinearGradient(0, -R * 1.1, 0, R * 1.25);
-    bodyGrad.addColorStop(0, '#3bb4ff');
-    bodyGrad.addColorStop(0.55, '#0d6bd1');
-    bodyGrad.addColorStop(1, '#073a7a');
-    ctx.fillStyle = bodyGrad;
-    ctx.shadowColor = 'rgba(30,120,255,0.45)';
-    ctx.shadowBlur = 10;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#d9edff';
-    ctx.stroke();
-
-    // Bordo interno leggero
-    pathShield(3);
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Riflesso morbido
-    ctx.save();
-    ctx.beginPath();
-    pathShield(0);
-    ctx.clip();
-    const glare = ctx.createRadialGradient(-R * 0.3, -R * 0.7, 2, -R * 0.3, -R * 0.7, R * 1.2);
-    glare.addColorStop(0, 'rgba(255,255,255,0.35)');
-    glare.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = glare;
-    ctx.fillRect(-R * 2, -R * 2, R * 4, R * 4);
-    ctx.restore();
-
-    // Tridente giallo al centro
-    ctx.save();
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#ffd24a';
-    ctx.fillStyle = '#ffd24a';
-    ctx.shadowColor = 'rgba(255,210,80,0.55)';
-    ctx.shadowBlur = 8;
-    const lw = Math.max(2, R * 0.28);
-    ctx.lineWidth = lw;
-
-    // Asta centrale
-    ctx.beginPath();
-    ctx.moveTo(0, R * 0.9);
-    ctx.lineTo(0, -R * 0.35);
-    ctx.stroke();
-
-    // Punta centrale (triangolo)
-    ctx.beginPath();
-    ctx.moveTo(0, -R * 1.0);
-    ctx.lineTo(-R * 0.18, -R * 0.55);
-    ctx.lineTo(R * 0.18, -R * 0.55);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bracci laterali
-    ctx.beginPath();
-    ctx.moveTo(0, -R * 0.5);
-    ctx.lineTo(-R * 0.42, -R * 0.15);
-    ctx.moveTo(0, -R * 0.5);
-    ctx.lineTo(R * 0.42, -R * 0.15);
-    ctx.stroke();
-
-    // Punte laterali (triangolini)
-    ctx.beginPath();
-    // sinistra
-    ctx.moveTo(-R * 0.42, -R * 0.15);
-    ctx.lineTo(-R * 0.58, -R * 0.45);
-    ctx.lineTo(-R * 0.28, -R * 0.35);
-    ctx.closePath();
-    // destra
-    ctx.moveTo(R * 0.42, -R * 0.15);
-    ctx.lineTo(R * 0.58, -R * 0.45);
-    ctx.lineTo(R * 0.28, -R * 0.35);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
+    ctx.drawImage(shieldCanvas, -shieldCanvas.width/2, -shieldCanvas.height/2);
     ctx.restore();
 }
 function spawnShieldMaybe() {
@@ -1415,53 +1299,6 @@ function consumeShieldEffect() {
     shieldBreakingEnd = Date.now() + SHIELD_BREAK_DURATION;
     shieldInvulnUntil = shieldBreakingEnd; // invulnerabile finché dura l'anim di rottura
     spawnParticles(80, chicoY, '#9fdfff');
-}
-
-function drawBottle(bottle) {
-    ctx.save();
-    const bob = Math.sin((Date.now() + bottle.x * 50) / 500) * 3;
-    ctx.translate(bottle.x, bottle.y + bob);
-    ctx.rotate(-Math.PI/8);
-
-    // Corpo in vetro
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, BOTTLE_RADIUS, BOTTLE_RADIUS*1.3, 0, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.stroke();
-
-    // Liquido (rum ambrato)
-    ctx.beginPath();
-    ctx.ellipse(0, 4, BOTTLE_RADIUS*0.9, BOTTLE_RADIUS*0.9, 0, 0, Math.PI*2);
-    ctx.fillStyle = '#c97e2b';
-    ctx.globalAlpha = 0.85;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // Collo della bottiglia
-    ctx.fillStyle = '#e0e0e0';
-    ctx.fillRect(-4, -BOTTLE_RADIUS*1.3-10, 8, 18);
-    // Tappo
-    ctx.fillStyle = '#5b2b17';
-    ctx.fillRect(-6, -BOTTLE_RADIUS*1.3-14, 12, 6);
-
-    // Etichetta con "R"
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(-10, -2, 20, 12);
-    ctx.strokeStyle = '#b33';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-10, -2, 20, 12);
-    ctx.fillStyle = '#b33';
-    ctx.font = 'bold 10px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('R', 0, 4);
-
-    ctx.restore();
 }
 
         function drawObstacle(obs) {
@@ -1513,12 +1350,18 @@ function drawBottle(bottle) {
         }
         function capitalizeFirst(s){return s.charAt(0).toUpperCase()+s.slice(1);}        
 
+        // Ottimizzazione: pausa game loop se tab non visibile
+        let lastScoreDrawn = -1;
+        let lastAmmoDrawn = -1;
         function gameLoop() {
+            if (document.hidden) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-                drawClouds();
-                drawParallax();
+            drawClouds();
+            drawParallax();
             drawParticles();
-
             // Fase pre-avvio: scena statica con suggerimento
             if (!hasStarted && !gameOver) {
                 for (let i = 0; i < obstacles.length; i++) {
@@ -1531,22 +1374,21 @@ function drawBottle(bottle) {
                 const bob = Math.sin(Date.now() / 400) * 3;
                 drawChico(chicoY + bob);
                 drawHintOverlay();
-                document.getElementById('score').textContent = `RUM: ${score}`;
+                // Aggiorna score solo se cambia
+                if (lastScoreDrawn !== score) {
+                    document.getElementById('score').textContent = `RUM: ${score}`;
+                    lastScoreDrawn = score;
+                }
                 requestAnimationFrame(gameLoop);
                 return;
             }
-
             updateDifficulty();
-            // Possibile spawn scudo
             spawnShieldMaybe();
-            // Possibile spawn pannocchia
             spawnCornMaybe();
-            // Ostacoli (barili a terra/cielo)
             for (let i = 0; i < obstacles.length; i++) {
                 let obs = obstacles[i];
                 obs.x -= obstacleSpeed;
                 drawObstacle(obs);
-                // Collisione con il bordo del gap
                 if (
                     80 + CHICO_RADIUS > obs.x &&
                     80 - CHICO_RADIUS < obs.x + OBSTACLE_WIDTH
@@ -1559,14 +1401,11 @@ function drawBottle(bottle) {
                         gameOver = true;
                     }
                 }
-                // Punteggio solo tramite bottiglie: non incrementare qui
                 obs.passed = obs.passed || (obs.x + OBSTACLE_WIDTH < 80 - CHICO_RADIUS);
             }
-            // Pulisci ostacoli usciti dallo schermo
             if (obstacles.length && obstacles[0].x + OBSTACLE_WIDTH < 0) {
                 obstacles.shift();
             }
-            // Genera nuovi ostacoli a distanza regolare
             if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 220) {
                 obstacles.push(createObstacle(canvas.width + Math.random() * 120));
             }
@@ -1673,17 +1512,22 @@ function drawBottle(bottle) {
             // Proiettili
             updateProjectiles();
 
-            document.getElementById('score').textContent = `RUM: ${score}`;
+            // Aggiorna score solo se cambia
+            if (lastScoreDrawn !== score) {
+                document.getElementById('score').textContent = `RUM: ${score}`;
+                lastScoreDrawn = score;
+            }
+            // Aggiorna ammo solo se cambia
             const ammoDisp = document.getElementById('ammoDisplay');
-            if (ammoDisp) ammoDisp.textContent = '🌽'.repeat(ammo);
+            if (ammoDisp && lastAmmoDrawn !== ammo) {
+                ammoDisp.textContent = '🌽'.repeat(ammo);
+                lastAmmoDrawn = ammo;
+            }
             if (!gameOver) {
                 requestAnimationFrame(gameLoop);
             } else {
-                // Mostra overlay e tenta anche shareScore nativo se disponibile
                 telegramShareScore(score);
                 showGameOverScreen(score);
-
-                // Disegno testuale opzionale sotto l’overlay
                 ctx.font = 'bold 36px Arial';
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
@@ -1799,6 +1643,12 @@ function drawBottle(bottle) {
     // Inizializza munizioni visualizzate
     document.getElementById('ammoDisplay').textContent = '🌽'.repeat(ammo);
     gameLoop();
+    // Pausa/riavvia il game loop se la tab cambia visibilità
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            requestAnimationFrame(gameLoop);
+        }
+    });
     </script>
 </body>
 </html>
