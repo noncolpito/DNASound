@@ -397,8 +397,11 @@
             { id:1, weight:0.48, speed:[0.09,0.16], scale:[1.05,1.35], alpha:0.80, y:[-10,60],    blur:10 },  // medie, molto grandi (ancora più in alto)
             { id:2, weight:0.24, speed:[0.15,0.26], scale:[1.3,1.65], alpha:0.92, y:[10,100],    blur:14 }   // vicine, enormi (ancora più in alto)
         ];
-        const TOTAL_CLOUDS = 11;
-        let clouds = [];
+    const TOTAL_CLOUDS = 7; // ridotto per performance
+    let clouds = [];
+    // Ottimizzazione: pre-rendering nuvole
+    let cloudCanvases = [];
+    let cloudFrameSkip = 0;
         function pickLayer() {
             const r = Math.random();
             let acc = 0;
@@ -423,7 +426,50 @@
                 const rh = h * (0.28 + Math.random()*0.22);
                 lobeData.push({ lx, ly, rw, rh });
             }
-            return { x, y, w, h, speed, lobes, lobeData, layer: cfg.id, alpha: cfg.alpha, blur: cfg.blur, scale };
+            // Pre-render cloud
+            const off = document.createElement('canvas');
+            off.width = Math.ceil(w+24); off.height = Math.ceil(h+24);
+            const offCtx = off.getContext('2d');
+            offCtx.save();
+            offCtx.translate(off.width/2, off.height/2);
+            offCtx.globalAlpha = cfg.alpha;
+            // Forma
+            offCtx.beginPath();
+            for (let i=0;i<lobeData.length;i++) {
+                const L = lobeData[i];
+                offCtx.ellipse(L.lx, L.ly, L.rw, L.rh, 0, 0, Math.PI*2);
+            }
+            // Gradiente volumetrico
+            const gradBody = offCtx.createLinearGradient(-w/2, -h/2, w/2, h/2);
+            gradBody.addColorStop(0, 'rgba(255,255,255,0.96)');
+            gradBody.addColorStop(0.55, 'rgba(240,245,255,0.88)');
+            gradBody.addColorStop(1, 'rgba(210,225,245,0.72)');
+            offCtx.fillStyle = gradBody;
+            // offCtx.shadowColor = 'rgba(255,255,255,0.9)';
+            // offCtx.shadowBlur = cfg.blur; // ombra rimossa per performance
+            offCtx.fill();
+            // Ombra inferiore / retro
+            offCtx.globalCompositeOperation = 'source-atop';
+            const shade = offCtx.createLinearGradient(0,-h/2,0,h/2);
+            shade.addColorStop(0,'rgba(0,0,0,0)');
+            shade.addColorStop(0.55,'rgba(0,0,0,0)');
+            shade.addColorStop(1,'rgba(0,0,0,0.13)');
+            offCtx.fillStyle = shade;
+            offCtx.fill();
+            // Highlight direzionale
+            offCtx.globalCompositeOperation = 'lighter';
+            const rimR = Math.min(w, h) * 0.22;
+            const hx = -w/4 - (-0.6) * 6;
+            const hy = -h/4 - (-0.8) * 6;
+            const highlight = offCtx.createRadialGradient(hx, hy, rimR*0.1, hx, hy, rimR);
+            highlight.addColorStop(0,'rgba(255,255,255,0.7)');
+            highlight.addColorStop(1,'rgba(255,255,255,0)');
+            offCtx.beginPath();
+            offCtx.ellipse(hx, hy, rimR, rimR*0.7, 0, 0, Math.PI*2);
+            offCtx.fillStyle = highlight;
+            offCtx.fill();
+            offCtx.restore();
+            return { x, y, w, h, speed, lobes, lobeData, layer: cfg.id, alpha: cfg.alpha, blur: cfg.blur, scale, offscreen: off };
         }
         function resetClouds() {
             clouds = [];
@@ -442,54 +488,22 @@
             Object.assign(c, nc);
         }
         function drawClouds() {
-            // Ordina per layer (lontane prima) per profondità
-            clouds.sort((a,b)=> a.layer - b.layer);
-            const now = Date.now();
+            // Frame skipping: aggiorna solo ogni 2 frame
+            cloudFrameSkip = (cloudFrameSkip+1)%2;
+            if (cloudFrameSkip===0) {
+                for (let c of clouds) {
+                    c.x -= c.speed;
+                    if (c.x + c.w < -80) {
+                        recycleCloud(c);
+                    }
+                }
+            }
+            // Ordina per layer solo quando necessario (non ogni frame)
+            // clouds.sort((a,b)=> a.layer - b.layer); // disabilitato per performance
             for (let c of clouds) {
-                c.x -= c.speed; // movimento costante
-                if (c.x + c.w < -80) {
-                    recycleCloud(c);
-                }
-                const lightDir = { x:-0.6, y:-0.8 };
                 ctx.save();
-                ctx.translate(c.x + c.w/2, c.y + c.h/2);
                 ctx.globalAlpha = c.alpha;
-                // Costruisci forma
-                ctx.beginPath();
-                for (let i=0;i<c.lobeData.length;i++) {
-                    const L = c.lobeData[i];
-                    const bob = Math.sin((now/1700) + (c.x*0.015) + i*0.9) * (1.5 + c.layer);
-                    ctx.ellipse(L.lx, L.ly + bob, L.rw, L.rh, 0, 0, Math.PI*2);
-                }
-                // Gradiente volumetrico
-                const gradBody = ctx.createLinearGradient(-c.w/2, -c.h/2, c.w/2, c.h/2);
-                gradBody.addColorStop(0, 'rgba(255,255,255,0.96)');
-                gradBody.addColorStop(0.55, 'rgba(240,245,255,0.88)');
-                gradBody.addColorStop(1, 'rgba(210,225,245,0.72)');
-                ctx.fillStyle = gradBody;
-                ctx.shadowColor = 'rgba(255,255,255,0.9)';
-                ctx.shadowBlur = c.blur;
-                ctx.fill();
-                // Ombra inferiore / retro
-                ctx.globalCompositeOperation = 'source-atop';
-                const shade = ctx.createLinearGradient(0,-c.h/2,0,c.h/2);
-                shade.addColorStop(0,'rgba(0,0,0,0)');
-                shade.addColorStop(0.55,'rgba(0,0,0,0)');
-                shade.addColorStop(1,'rgba(0,0,0,0.13)');
-                ctx.fillStyle = shade;
-                ctx.fill();
-                // Highlight direzionale (uno solo per nuvola)
-                ctx.globalCompositeOperation = 'lighter';
-                const rimR = Math.min(c.w, c.h) * 0.22;
-                const hx = -c.w/4 - lightDir.x * 6;
-                const hy = -c.h/4 - lightDir.y * 6;
-                const highlight = ctx.createRadialGradient(hx, hy, rimR*0.1, hx, hy, rimR);
-                highlight.addColorStop(0,'rgba(255,255,255,0.7)');
-                highlight.addColorStop(1,'rgba(255,255,255,0)');
-                ctx.beginPath();
-                ctx.ellipse(hx, hy, rimR, rimR*0.7, 0, 0, Math.PI*2);
-                ctx.fillStyle = highlight;
-                ctx.fill();
+                ctx.drawImage(c.offscreen, c.x, c.y);
                 ctx.restore();
             }
         }
@@ -569,47 +583,59 @@
         }
 
         // Mare: onde che scorrono orizzontalmente
+        // Ottimizzazione: frame skipping onde del mare
+        let seaFrameSkip = 0;
+        let seaCache = null, seaCacheTime = 0;
         function drawSeaParallax() {
-            const t = Date.now() / 1000;
-            const baseY = canvas.height - 38;
-            const h = 38;
-            const waveLen = 110;
-            const amp = 7;
-            const speed = 32; // px/sec
+            seaFrameSkip = (seaFrameSkip+1)%3;
+            const now = Date.now();
+            if (seaFrameSkip===0 || !seaCache || now-seaCacheTime>120) {
+                // Redraw sea
+                const t = now / 1000;
+                const baseY = canvas.height - 38;
+                const h = 38;
+                const waveLen = 110;
+                const amp = 7;
+                const speed = 32;
+                const off = document.createElement('canvas');
+                off.width = canvas.width; off.height = h+8;
+                const offCtx = off.getContext('2d');
+                offCtx.globalAlpha = 0.82;
+                offCtx.beginPath();
+                for (let x = 0; x <= canvas.width+2; x += 2) {
+                    const y = 8 + Math.sin((x + t*speed) / waveLen) * amp + Math.sin((x - t*speed*0.7) / (waveLen*0.6)) * 2.5;
+                    if (x === 0) offCtx.moveTo(x, y);
+                    else offCtx.lineTo(x, y);
+                }
+                offCtx.lineTo(canvas.width, h+8);
+                offCtx.lineTo(0, h+8);
+                offCtx.closePath();
+                const grad = offCtx.createLinearGradient(0, 8, 0, h+8);
+                grad.addColorStop(0, '#b3e6ff');
+                grad.addColorStop(0.5, '#5ec6e6');
+                grad.addColorStop(1, 'rgba(0,80,180,0.85)');
+                offCtx.fillStyle = grad;
+                // offCtx.shadowColor = '#b3e6ff'; // ombra rimossa
+                // offCtx.shadowBlur = 0;
+                offCtx.fill();
+                offCtx.globalAlpha = 1;
+                offCtx.beginPath();
+                for (let x = 0; x <= canvas.width+2; x += 4) {
+                    const y = 8 + Math.sin((x + t*speed) / waveLen) * amp - 2;
+                    if (x === 0) offCtx.moveTo(x, y);
+                    else offCtx.lineTo(x, y);
+                }
+                offCtx.strokeStyle = 'rgba(255,255,255,0.32)';
+                offCtx.lineWidth = 2.2;
+                // offCtx.shadowColor = 'rgba(255,255,255,0.18)';
+                // offCtx.shadowBlur = 0;
+                offCtx.stroke();
+                seaCache = off;
+                seaCacheTime = now;
+            }
             ctx.save();
-            ctx.globalAlpha = 0.82;
-            // Onda principale
-            ctx.beginPath();
-            for (let x = 0; x <= canvas.width+2; x += 2) {
-                const y = baseY + Math.sin((x + t*speed) / waveLen) * amp + Math.sin((x - t*speed*0.7) / (waveLen*0.6)) * 2.5;
-                if (x === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.lineTo(canvas.width, canvas.height);
-            ctx.lineTo(0, canvas.height);
-            ctx.closePath();
-            // Gradiente azzurro trasparente
-            const grad = ctx.createLinearGradient(0, baseY, 0, canvas.height);
-            grad.addColorStop(0, '#b3e6ff');
-            grad.addColorStop(0.5, '#5ec6e6');
-            grad.addColorStop(1, 'rgba(0,80,180,0.85)');
-            ctx.fillStyle = grad;
-            ctx.shadowColor = '#b3e6ff';
-            ctx.shadowBlur = 12;
-            ctx.fill();
             ctx.globalAlpha = 1;
-            // Cresta bianca semitrasparente
-            ctx.beginPath();
-            for (let x = 0; x <= canvas.width+2; x += 4) {
-                const y = baseY + Math.sin((x + t*speed) / waveLen) * amp - 2;
-                if (x === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.strokeStyle = 'rgba(255,255,255,0.32)';
-            ctx.lineWidth = 2.2;
-            ctx.shadowColor = 'rgba(255,255,255,0.18)';
-            ctx.shadowBlur = 6;
-            ctx.stroke();
+            ctx.drawImage(seaCache, 0, canvas.height-38);
             ctx.restore();
         }
 
@@ -643,34 +669,40 @@
             return Date.now() < safeStartEndTime;
         }
 
+        // Ottimizzazione: frame skipping particelle
+        let particleFrameSkip = 0;
         function drawParticles() {
+            particleFrameSkip = (particleFrameSkip+1)%2;
             for (let i = particles.length-1; i >= 0; i--) {
                 let p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.life--;
+                if (particleFrameSkip===0) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+                }
                 ctx.save();
                 ctx.globalAlpha = Math.max(0, p.life/20);
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
                 ctx.fillStyle = p.color;
-                ctx.shadowColor = p.color;
-                ctx.shadowBlur = 8;
+                // ctx.shadowColor = p.color; // ombra rimossa
+                // ctx.shadowBlur = 0;
                 ctx.fill();
                 ctx.restore();
                 if (p.life <= 0) particles.splice(i,1);
             }
         }
 
+        // Ottimizzazione: meno particelle
         function spawnParticles(x, y, color='#ffd700') {
-            for (let i=0; i<12; i++) {
+            for (let i=0; i<6; i++) {
                 particles.push({
                     x, y,
-                    vx: (Math.random()-0.5)*2.5,
-                    vy: (Math.random()-0.5)*2.5,
+                    vx: (Math.random()-0.5)*2.2,
+                    vy: (Math.random()-0.5)*2.2,
                     size: 2+Math.random()*2,
                     color,
-                    life: 18+Math.random()*8
+                    life: 14+Math.random()*6
                 });
             }
         }
@@ -763,19 +795,18 @@
             const y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
             return { x: x, y: y, type: type, passed: false };
         }
+// Ottimizzazione: frame skipping ali/gabbiani
+let birdWingFrameSkip = 0;
 function drawFlyingObstacle(obs) {
     ctx.save();
     if (obs.type === 'barile') {
-        // Barile dettagliato
-        // Corpo
         ctx.save();
         ctx.beginPath();
         ctx.ellipse(obs.x + FLYING_OBSTACLE_WIDTH/2, obs.y + FLYING_OBSTACLE_HEIGHT/2, FLYING_OBSTACLE_WIDTH/2, FLYING_OBSTACLE_HEIGHT/2, 0, 0, Math.PI * 2);
         ctx.fillStyle = '#a0522d';
-        ctx.shadowColor = '#654321';
-        ctx.shadowBlur = 8;
+        // ctx.shadowColor = '#654321'; // ombra rimossa
+        // ctx.shadowBlur = 0;
         ctx.fill();
-        ctx.shadowBlur = 0;
         // Doghe
         ctx.strokeStyle = '#8B5A2B';
         ctx.lineWidth = 2;
@@ -796,16 +827,9 @@ function drawFlyingObstacle(obs) {
         ctx.stroke();
         ctx.restore();
     } else {
-        // Gabbiano migliorato
         ctx.save();
         const cx = obs.x + FLYING_OBSTACLE_WIDTH/2;
         const cy = obs.y + FLYING_OBSTACLE_HEIGHT/2;
-
-        // Ombra lieve
-        ctx.shadowColor = 'rgba(0,0,0,0.25)';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 1;
-
         // Corpo con gradiente
         const bodyGrad = ctx.createLinearGradient(cx - 12, cy - 10, cx + 12, cy + 10);
         bodyGrad.addColorStop(0, '#f6f6f6');
@@ -814,11 +838,9 @@ function drawFlyingObstacle(obs) {
         ctx.ellipse(cx, cy, 16, 10, Math.PI/14, 0, Math.PI * 2);
         ctx.fillStyle = bodyGrad;
         ctx.fill();
-        ctx.shadowBlur = 0;
         ctx.lineWidth = 1;
         ctx.strokeStyle = 'rgba(0,0,0,0.15)';
         ctx.stroke();
-
         // Testa
         const headGrad = ctx.createRadialGradient(cx + 10, cy - 4, 1, cx + 8, cy - 4, 6);
         headGrad.addColorStop(0, '#ffffff');
@@ -829,12 +851,10 @@ function drawFlyingObstacle(obs) {
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.12)';
         ctx.stroke();
-
         // Becco (superiore/inferiore) con sfumatura
         const beakGrad = ctx.createLinearGradient(cx + 12, cy - 4, cx + 24, cy + 2);
         beakGrad.addColorStop(0, '#ffd16a');
         beakGrad.addColorStop(1, '#ffae00');
-        // superiore
         ctx.beginPath();
         ctx.moveTo(cx + 12, cy - 2);
         ctx.quadraticCurveTo(cx + 20, cy - 6, cx + 24, cy - 1);
@@ -842,7 +862,6 @@ function drawFlyingObstacle(obs) {
         ctx.closePath();
         ctx.fillStyle = beakGrad;
         ctx.fill();
-        // inferiore
         ctx.beginPath();
         ctx.moveTo(cx + 12, cy - 1);
         ctx.quadraticCurveTo(cx + 19, cy + 2, cx + 23, cy + 1);
@@ -850,7 +869,6 @@ function drawFlyingObstacle(obs) {
         ctx.closePath();
         ctx.fillStyle = '#ffae00';
         ctx.fill();
-
         // Occhio con riflesso
         ctx.beginPath();
         ctx.arc(cx + 9, cy - 3, 1.6, 0, Math.PI * 2);
@@ -860,11 +878,17 @@ function drawFlyingObstacle(obs) {
         ctx.arc(cx + 9.6, cy - 3.4, 0.5, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.fill();
-
-        // Ali animate
-        const t = Date.now();
-        const wingAngle = Math.sin((t + obs.x * 30) / 180) * 0.6;
-        // Ala posteriore (più trasparente)
+        // Ali animate (frame skipping)
+        birdWingFrameSkip = (birdWingFrameSkip+1)%2;
+        let wingAngle = 0;
+        if (birdWingFrameSkip===0) {
+            const t = Date.now();
+            wingAngle = Math.sin((t + obs.x * 30) / 180) * 0.6;
+            obs._wingAngle = wingAngle;
+        } else if (typeof obs._wingAngle !== 'undefined') {
+            wingAngle = obs._wingAngle;
+        }
+        // Ala posteriore
         ctx.save();
         ctx.translate(cx - 6, cy - 2);
         ctx.rotate(-0.15 - wingAngle * 0.8);
@@ -890,7 +914,6 @@ function drawFlyingObstacle(obs) {
         ctx.strokeStyle = 'rgba(0,0,0,0.15)';
         ctx.stroke();
         ctx.restore();
-
         // Coda
         ctx.beginPath();
         ctx.moveTo(cx - 12, cy + 2);
@@ -899,9 +922,9 @@ function drawFlyingObstacle(obs) {
         ctx.closePath();
         ctx.fillStyle = '#dcdcdc';
         ctx.fill();
-
-        ctx.restore(); // fine ramo gabbiano
-    } // close else branch
+        ctx.restore();
+    }
+    ctx.restore();
 }
 // ====== Proiettili (chicchi di mais) ======
 function fire() {
