@@ -291,6 +291,10 @@
     // Costanti di gioco
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    // Ottimizzazione: frame skip globale
+    let globalFrameSkip = 0;
+    // Ottimizzazione: pre-render Chico
+    let chicoCache = null, chicoCacheKey = '';
     // Bot Telegram per deep-link punteggio
     const BOT_USERNAME = 'ChicoGiocaBot';
     let lastFinalScore = 0;
@@ -1068,217 +1072,233 @@ function drawCornItem(item) {
 }
 
 // Ottimizzazione: frame skipping e meno ombre/gradienti su Chico
-let chicoFrameSkip = 0;
-let chicoWingAngle = 0;
 function drawChico(y) {
-    chicoFrameSkip = (chicoFrameSkip+1)%2;
-    ctx.save();
-    const x = 80;
+    // Unico frame skip globale
+    globalFrameSkip = (globalFrameSkip+1)%2;
+    // Pre-render key: y, scudo, breaking, wingAngle
+    let x = 80;
+    let hasScudo = hasShield;
+    let breaking = Date.now() < shieldBreakingEnd;
+    let wingAngle = 0;
+    if (globalFrameSkip===0 || !chicoCache) {
+        wingAngle = Math.sin(Date.now() / 120) * 0.5 + (chicoVY < 0 ? -0.7 : 0);
+    } else if (chicoCacheKey) {
+        wingAngle = chicoCacheKey.wingAngle;
+    }
+    let cacheKey = JSON.stringify({y:Math.round(y),hasScudo,breaking,wingAngle:Math.round(wingAngle*100)});
+    if (chicoCache && chicoCacheKey && chicoCacheKey.key === cacheKey) {
+        ctx.drawImage(chicoCache,0,0);
+        return;
+    }
+    // Pre-render Chico
+    let off = document.createElement('canvas');
+    off.width = canvas.width; off.height = canvas.height;
+    let octx = off.getContext('2d');
+    // ...existing code for drawing Chico, replace ctx with octx and x/y as above...
     // Aura scudo / flash consumo (ombre ridotte)
-    if (hasShield) {
-        ctx.save();
+    if (hasScudo) {
+        octx.save();
         const pulse = 0.6 + Math.sin(Date.now()/180) * 0.25;
-        ctx.beginPath();
-        ctx.arc(x, y, CHICO_RADIUS + 14 + pulse * 4, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(160,230,255,0.5)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.restore();
-    } else if (Date.now() < shieldBreakingEnd) {
+        octx.beginPath();
+        octx.arc(x, y, CHICO_RADIUS + 14 + pulse * 4, 0, Math.PI * 2);
+        octx.strokeStyle = 'rgba(160,230,255,0.5)';
+        octx.lineWidth = 2;
+        octx.stroke();
+        octx.restore();
+    } else if (breaking) {
         const remain = (shieldBreakingEnd - Date.now()) / SHIELD_BREAK_DURATION;
         const rings = 2;
         for (let i=0;i<rings;i++) {
             const ratio = i / rings;
             const alpha = Math.max(0,(remain - ratio*0.25))*0.6;
             if (alpha <= 0) continue;
-            ctx.save();
+            octx.save();
             const r = CHICO_RADIUS + 12 + ratio*28 + Math.sin(Date.now()/90 + i)*2;
-            ctx.globalAlpha = alpha;
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI*2);
-            ctx.strokeStyle = 'rgba(150,220,255,0.5)';
-            ctx.lineWidth = 1.5 + (1-remain)*1.5;
-            ctx.stroke();
-            ctx.restore();
+            octx.globalAlpha = alpha;
+            octx.beginPath();
+            octx.arc(x, y, r, 0, Math.PI*2);
+            octx.strokeStyle = 'rgba(150,220,255,0.5)';
+            octx.lineWidth = 1.5 + (1-remain)*1.5;
+            octx.stroke();
+            octx.restore();
         }
     }
     // Corpo (rosso) con gradiente e contorno
-    const bodyGrad = ctx.createRadialGradient(x - 6, y - 8, CHICO_RADIUS * 0.2, x, y, CHICO_RADIUS);
+    const bodyGrad = octx.createRadialGradient(x - 6, y - 8, CHICO_RADIUS * 0.2, x, y, CHICO_RADIUS);
     bodyGrad.addColorStop(0, '#ff3b30');
     bodyGrad.addColorStop(1, '#8c0000');
-    ctx.beginPath();
-    ctx.arc(x, y, CHICO_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = '#7a0000';
-    ctx.stroke();
+    octx.beginPath();
+    octx.arc(x, y, CHICO_RADIUS, 0, Math.PI * 2);
+    octx.fillStyle = bodyGrad;
+    octx.fill();
+    octx.lineWidth = 1.2;
+    octx.strokeStyle = '#7a0000';
+    octx.stroke();
     // Pancia (giallo-oro) con gradiente
-    const bellyGrad = ctx.createRadialGradient(x, y + 10, CHICO_RADIUS * 0.2, x, y + 10, CHICO_RADIUS * 0.7);
+    const bellyGrad = octx.createRadialGradient(x, y + 10, CHICO_RADIUS * 0.2, x, y + 10, CHICO_RADIUS * 0.7);
     bellyGrad.addColorStop(0, '#ffe680');
     bellyGrad.addColorStop(1, '#d4b200');
-    ctx.beginPath();
-    ctx.arc(x, y + 10, CHICO_RADIUS * 0.7, 0, Math.PI * 2);
-    ctx.fillStyle = bellyGrad;
-    ctx.fill();
+    octx.beginPath();
+    octx.arc(x, y + 10, CHICO_RADIUS * 0.7, 0, Math.PI * 2);
+    octx.fillStyle = bellyGrad;
+    octx.fill();
     // Coda a piume (rosso, giallo, blu)
-    ctx.save();
-    ctx.translate(x, y + CHICO_RADIUS - 2);
-    ctx.rotate(Math.PI / 8);
+    octx.save();
+    octx.translate(x, y + CHICO_RADIUS - 2);
+    octx.rotate(Math.PI / 8);
     const tailColors = ['#ff3b30', '#ffd700', '#0078ff'];
     for (let i = 0; i < tailColors.length; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-2 - i * 2, 0);
-        ctx.quadraticCurveTo(-16 - i * 4, 16 + i * 2, -2 - i * 2, 28 + i * 2);
-        ctx.quadraticCurveTo(2 - i, 20 + i * 2, -2 - i * 2, 0);
-        ctx.fillStyle = tailColors[i];
-        ctx.globalAlpha = 0.9 - i * 0.15;
-        ctx.fill();
+        octx.beginPath();
+        octx.moveTo(-2 - i * 2, 0);
+        octx.quadraticCurveTo(-16 - i * 4, 16 + i * 2, -2 - i * 2, 28 + i * 2);
+        octx.quadraticCurveTo(2 - i, 20 + i * 2, -2 - i * 2, 0);
+        octx.fillStyle = tailColors[i];
+        octx.globalAlpha = 0.9 - i * 0.15;
+        octx.fill();
     }
-    ctx.globalAlpha = 1;
-    ctx.restore();
+    octx.globalAlpha = 1;
+    octx.restore();
     // Piume decorative rosse
     for (let i = 0; i < 3; i++) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(Math.PI / 7 * i);
-        ctx.beginPath();
-        ctx.moveTo(-CHICO_RADIUS + 6, -6);
-        ctx.quadraticCurveTo(-CHICO_RADIUS - 6, -10, -CHICO_RADIUS + 1, -1);
-        ctx.strokeStyle = '#ff5a5f';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-        ctx.restore();
+        octx.save();
+        octx.translate(x, y);
+        octx.rotate(Math.PI / 7 * i);
+        octx.beginPath();
+        octx.moveTo(-CHICO_RADIUS + 6, -6);
+        octx.quadraticCurveTo(-CHICO_RADIUS - 6, -10, -CHICO_RADIUS + 1, -1);
+        octx.strokeStyle = '#ff5a5f';
+        octx.lineWidth = 1.2;
+        octx.stroke();
+        octx.restore();
     }
-    // Ali animate con gradiente (frame skipping)
-    if (chicoFrameSkip===0) {
-        chicoWingAngle = Math.sin(Date.now() / 120) * 0.5 + (chicoVY < 0 ? -0.7 : 0);
-    }
+    // Ali animate con gradiente
     for (let i = 0; i < 2; i++) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(chicoWingAngle + i * 0.1);
+        octx.save();
+        octx.translate(x, y);
+        octx.rotate(wingAngle + i * 0.1);
         const cx = -18, cy = i * 2, rx = 18 - i * 2, ry = 8;
-        const wingGrad = ctx.createRadialGradient(cx - 6, cy - 4, 2, cx, cy, rx);
+        const wingGrad = octx.createRadialGradient(cx - 6, cy - 4, 2, cx, cy, rx);
         wingGrad.addColorStop(0, '#ff6666');
         wingGrad.addColorStop(1, '#b10000');
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, rx, ry, Math.PI / 4, 0, Math.PI * 2);
-        ctx.fillStyle = wingGrad;
-        ctx.globalAlpha = 0.78 - i * 0.18;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(122,0,0,0.6)';
-        ctx.stroke();
-        ctx.restore();
+        octx.beginPath();
+        octx.ellipse(cx, cy, rx, ry, Math.PI / 4, 0, Math.PI * 2);
+        octx.fillStyle = wingGrad;
+        octx.globalAlpha = 0.78 - i * 0.18;
+        octx.fill();
+        octx.globalAlpha = 1;
+        octx.lineWidth = 1;
+        octx.strokeStyle = 'rgba(122,0,0,0.6)';
+        octx.stroke();
+        octx.restore();
     }
     // Becco
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + CHICO_RADIUS, y - 6);
-    ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y - 10, x + CHICO_RADIUS + 18, y - 2);
-    ctx.lineTo(x + CHICO_RADIUS + 1, y - 2);
-    ctx.closePath();
-    ctx.fillStyle = '#ffb347';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x + CHICO_RADIUS, y - 2);
-    ctx.quadraticCurveTo(x + CHICO_RADIUS + 10, y + 5, x + CHICO_RADIUS + 16, y + 2);
-    ctx.lineTo(x + CHICO_RADIUS, y + 4);
-    ctx.closePath();
-    ctx.fillStyle = '#ff9e2c';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x + CHICO_RADIUS + 2, y);
-    ctx.quadraticCurveTo(x + CHICO_RADIUS + 8, y + 2, x + CHICO_RADIUS + 14, y + 1);
-    ctx.strokeStyle = 'rgba(120,60,0,0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
+    octx.save();
+    octx.beginPath();
+    octx.moveTo(x + CHICO_RADIUS, y - 6);
+    octx.quadraticCurveTo(x + CHICO_RADIUS + 10, y - 10, x + CHICO_RADIUS + 18, y - 2);
+    octx.lineTo(x + CHICO_RADIUS + 1, y - 2);
+    octx.closePath();
+    octx.fillStyle = '#ffb347';
+    octx.fill();
+    octx.beginPath();
+    octx.moveTo(x + CHICO_RADIUS, y - 2);
+    octx.quadraticCurveTo(x + CHICO_RADIUS + 10, y + 5, x + CHICO_RADIUS + 16, y + 2);
+    octx.lineTo(x + CHICO_RADIUS, y + 4);
+    octx.closePath();
+    octx.fillStyle = '#ff9e2c';
+    octx.fill();
+    octx.beginPath();
+    octx.moveTo(x + CHICO_RADIUS + 2, y);
+    octx.quadraticCurveTo(x + CHICO_RADIUS + 8, y + 2, x + CHICO_RADIUS + 14, y + 1);
+    octx.strokeStyle = 'rgba(120,60,0,0.5)';
+    octx.lineWidth = 1;
+    octx.stroke();
+    octx.restore();
     // Orecchino d'oro
-    ctx.beginPath();
-    ctx.arc(x + 4, y + CHICO_RADIUS / 2, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd700';
-    ctx.fill();
-    ctx.strokeStyle = '#9b7500';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    octx.beginPath();
+    octx.arc(x + 4, y + CHICO_RADIUS / 2, 4, 0, Math.PI * 2);
+    octx.fillStyle = '#ffd700';
+    octx.fill();
+    octx.strokeStyle = '#9b7500';
+    octx.lineWidth = 1;
+    octx.stroke();
     // Occhio con bordo e riflessi
-    ctx.beginPath();
-    ctx.arc(x + 14, y - 8, 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x + 16, y - 8, 2.2, 0, Math.PI * 2);
-    ctx.fillStyle = 'black';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 12, y - 10, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 17.5, y - 6.5, 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fill();
+    octx.beginPath();
+    octx.arc(x + 14, y - 8, 6, 0, Math.PI * 2);
+    octx.fillStyle = 'white';
+    octx.fill();
+    octx.strokeStyle = 'rgba(0,0,0,0.6)';
+    octx.lineWidth = 1;
+    octx.stroke();
+    octx.beginPath();
+    octx.arc(x + 16, y - 8, 2.2, 0, Math.PI * 2);
+    octx.fillStyle = 'black';
+    octx.fill();
+    octx.beginPath();
+    octx.arc(x + 12, y - 10, 2, 0, Math.PI * 2);
+    octx.fillStyle = 'rgba(255,255,255,0.9)';
+    octx.fill();
+    octx.beginPath();
+    octx.arc(x + 17.5, y - 6.5, 0.8, 0, Math.PI * 2);
+    octx.fillStyle = 'rgba(255,255,255,0.7)';
+    octx.fill();
     // Benda da pirata
-    ctx.save();
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x + 14, y - 8, 6, Math.PI * 0.2, Math.PI * 0.8);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + 20, y - 13);
-    ctx.quadraticCurveTo(x + 25, y - 10, x + 22, y - 5);
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
+    octx.save();
+    octx.strokeStyle = '#222';
+    octx.lineWidth = 3;
+    octx.beginPath();
+    octx.arc(x + 14, y - 8, 6, Math.PI * 0.2, Math.PI * 0.8);
+    octx.stroke();
+    octx.beginPath();
+    octx.moveTo(x + 20, y - 13);
+    octx.quadraticCurveTo(x + 25, y - 10, x + 22, y - 5);
+    octx.strokeStyle = '#222';
+    octx.lineWidth = 2;
+    octx.stroke();
+    octx.restore();
     // Cappello da pirata (ombre ridotte)
-    ctx.save();
-    const hatGrad = ctx.createLinearGradient(x + 2, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 8);
+    octx.save();
+    const hatGrad = octx.createLinearGradient(x + 2, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 8);
     hatGrad.addColorStop(0, '#111');
     hatGrad.addColorStop(1, '#2a2a2a');
-    ctx.beginPath();
-    ctx.moveTo(x + 2, y - CHICO_RADIUS - 2);
-    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
-    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 8, x + 2, y - CHICO_RADIUS - 2);
-    ctx.closePath();
-    ctx.fillStyle = hatGrad;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x + 2, y - CHICO_RADIUS - 2);
-    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
-    ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + 8, y - CHICO_RADIUS - 8);
-    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 14, x + 28, y - CHICO_RADIUS - 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(x + 18, y - CHICO_RADIUS - 8, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 16, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
-    ctx.arc(x + 20, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
-    ctx.fillStyle = 'black';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x + 15, y - CHICO_RADIUS - 5);
-    ctx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 3, x + 21, y - CHICO_RADIUS - 5);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-    ctx.restore();
+    octx.beginPath();
+    octx.moveTo(x + 2, y - CHICO_RADIUS - 2);
+    octx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
+    octx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 8, x + 2, y - CHICO_RADIUS - 2);
+    octx.closePath();
+    octx.fillStyle = hatGrad;
+    octx.fill();
+    octx.beginPath();
+    octx.moveTo(x + 2, y - CHICO_RADIUS - 2);
+    octx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 18, x + 34, y - CHICO_RADIUS + 6);
+    octx.strokeStyle = '#ffd700';
+    octx.lineWidth = 1.5;
+    octx.stroke();
+    octx.beginPath();
+    octx.moveTo(x + 8, y - CHICO_RADIUS - 8);
+    octx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 14, x + 28, y - CHICO_RADIUS - 2);
+    octx.strokeStyle = 'rgba(255,255,255,0.10)';
+    octx.lineWidth = 1.2;
+    octx.stroke();
+    octx.beginPath();
+    octx.arc(x + 18, y - CHICO_RADIUS - 8, 5, 0, Math.PI * 2);
+    octx.fillStyle = 'white';
+    octx.fill();
+    octx.beginPath();
+    octx.arc(x + 16, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
+    octx.arc(x + 20, y - CHICO_RADIUS - 8, 1, 0, Math.PI * 2);
+    octx.fillStyle = 'black';
+    octx.fill();
+    octx.beginPath();
+    octx.moveTo(x + 15, y - CHICO_RADIUS - 5);
+    octx.quadraticCurveTo(x + 18, y - CHICO_RADIUS - 3, x + 21, y - CHICO_RADIUS - 5);
+    octx.strokeStyle = 'black';
+    octx.lineWidth = 1;
+    octx.stroke();
+    octx.restore();
+    chicoCache = off;
+    chicoCacheKey = {key: cacheKey, wingAngle};
+    ctx.drawImage(chicoCache,0,0);
 }
 
 // --- Power-up Scudo (tridente) ---
@@ -1673,7 +1693,11 @@ function drawBottle(bottle) {
             // Proiettili
             updateProjectiles();
 
-            document.getElementById('score').textContent = `RUM: ${score}`;
+            // Aggiorna score DOM solo se cambia
+            if (!window._lastScoreText || window._lastScoreText !== score) {
+                document.getElementById('score').textContent = `RUM: ${score}`;
+                window._lastScoreText = score;
+            }
             const ammoDisp = document.getElementById('ammoDisplay');
             if (ammoDisp) ammoDisp.textContent = '🌽'.repeat(ammo);
             if (!gameOver) {
