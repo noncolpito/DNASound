@@ -360,6 +360,19 @@
     let difficultyChosen = false;
         let obstacles = [];
 
+        // Utility: controlla se una posizione y è completamente dentro almeno un gap di ostacolo
+        function isYFreeFromObstacles(y, radius = 18) {
+            if (!obstacles.length) return true;
+            for (let i = 0; i < obstacles.length; i++) {
+                const obs = obstacles[i];
+                // L'oggetto deve stare COMPLETAMENTE dentro il gap
+                if (y - radius >= obs.gapY && y + radius <= obs.gapY + obs.gap) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // Bottiglie di rum
     const BOTTLE_RADIUS = 16;
     let bottles = [];
@@ -777,15 +790,19 @@
             const minY = 80;
             const maxY = canvas.height - 80;
             let y;
-            if (obstacles.length) {
-                const last = obstacles[obstacles.length - 1];
-                const target = last.gapY + obstacleGap / 2;
-                const spread = obstacleGap * 0.6;
-                y = target + (Math.random() - 0.5) * spread;
-                y = Math.max(minY, Math.min(maxY, y));
-            } else {
-                y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
-            }
+            let attempts = 0;
+            do {
+                if (obstacles.length) {
+                    const last = obstacles[obstacles.length - 1];
+                    const target = last.gapY + obstacleGap / 2;
+                    const spread = obstacleGap * 0.6;
+                    y = target + (Math.random() - 0.5) * spread;
+                    y = Math.max(minY, Math.min(maxY, y));
+                } else {
+                    y = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+                }
+                attempts++;
+            } while (!isYFreeFromObstacles(y, BOTTLE_RADIUS) && attempts < 30);
             return { x: x, y: y, collected: false };
         }
 
@@ -1048,7 +1065,11 @@ function spawnCornMaybe() {
     if (!hasStarted || gameOver) return;
     if (score - lastCornSpawnScore < CORN_MIN_SCORE_GAP) return;
     if (Math.random() < CORN_SPAWN_CHANCE / 60) { // mitigazione frame-rate
-        const y = 90 + Math.random() * (canvas.height - 250);
+        let y, attempts = 0;
+        do {
+            y = 90 + Math.random() * (canvas.height - 250);
+            attempts++;
+        } while (!isYFreeFromObstacles(y, CORN_RADIUS) && attempts < 30);
         cornItems.push({ x: canvas.width + 40, y, collected: false });
         lastCornSpawnScore = score;
     }
@@ -1423,7 +1444,11 @@ function spawnShieldMaybe() {
     if (hasShield || shieldItems.length>0) return;
     if (score - lastShieldSpawnScore < SHIELD_MIN_SCORE_GAP) return;
     if (hasStarted && Math.random() < SHIELD_SPAWN_CHANCE) {
-        const y = 100 + Math.random() * (canvas.height - 220);
+        let y, attempts = 0;
+        do {
+            y = 100 + Math.random() * (canvas.height - 220);
+            attempts++;
+        } while (!isYFreeFromObstacles(y, SHIELD_RADIUS) && attempts < 30);
         shieldItems.push({ x: canvas.width + 40, y, collected:false });
         lastShieldSpawnScore = score;
     }
@@ -1590,7 +1615,7 @@ function drawBottle(bottle) {
             if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 220) {
                 obstacles.push(createObstacle(canvas.width + Math.random() * 120));
             }
-            // Ostacoli volanti solo dopo 10 punti
+            // Ostacoli volanti solo dopo 5 punti
             if (score >= 5) {
                 for (let i = 0; i < flyingObstacles.length; i++) {
                     let obs = flyingObstacles[i];
