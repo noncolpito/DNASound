@@ -1612,7 +1612,7 @@ function drawBottle(bottle) {
                 obstacles.shift();
             }
             // Genera nuovi ostacoli a distanza regolare
-            if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 220) {
+            if (obstacles.length === 0 || obstacles[obstacles.length - 1].x < canvas.width - 280) {
                 obstacles.push(createObstacle(canvas.width + Math.random() * 120));
             }
             // Ostacoli volanti solo dopo 5 punti
